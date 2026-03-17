@@ -1,0 +1,3607 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>内政フェーズ + イベントフェーズ プロトタイプ</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
+
+  :root {
+    --bg-deep: #0a0d12;
+    --bg-panel: #161c28;
+    --gold: #c9a84c;
+    --gold-dim: #7a6030;
+    --red-light: #e74c3c;
+    --blue: #2e6da4;
+    --blue-light: #4a9fd4;
+    --green: #3a8a45;
+    --green-light: #5cba68;
+    --text-main: #d4c4a0;
+    --text-dim: #6a7a90;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg-deep);
+    color: var(--text-main);
+    font-family: 'Crimson Text', serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-bottom: 40px;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.6;
+  }
+
+  header {
+    width: 100%;
+    text-align: center;
+    padding: 18px 20px 10px;
+    position: relative;
+    z-index: 1;
+    border-bottom: 1px solid var(--gold-dim);
+  }
+
+  header h1 {
+    font-family: 'Cinzel', serif;
+    font-size: 1.45rem;
+    font-weight: 900;
+    color: var(--gold);
+    letter-spacing: 0.15em;
+    text-shadow: 0 0 20px rgba(201,168,76,0.4);
+  }
+
+  header p {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    margin-top: 3px;
+    letter-spacing: 0.05em;
+  }
+
+  /* ===== MAIN WRAPPER ===== */
+  .wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px 16px;
+    width: 100%;
+    max-width: 920px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ===== TOP: MAP + CITY INFO ===== */
+  .top-section {
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+  }
+
+  .map-col {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Status bar ABOVE map */
+  .map-status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 14px;
+    background: var(--bg-panel);
+    border: 1px solid var(--gold-dim);
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+  }
+
+  .resources {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+  }
+
+  .res-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-family: 'Cinzel', serif;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+  }
+
+  .res-icon { font-size: 1rem; }
+
+  .res-val {
+    color: var(--gold);
+    font-weight: 700;
+    font-size: 1.05rem;
+    min-width: 22px;
+    text-align: right;
+    transition: color 0.2s;
+  }
+
+  @keyframes resFlash {
+    0%   { color: #fff; }
+    100% { color: var(--gold); }
+  }
+  .res-val.flash { animation: resFlash 0.4s ease; }
+
+  .turn-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .ap-display {
+    font-family: 'Cinzel', serif;
+    font-size: 0.76rem;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .ap-val {
+    color: var(--blue-light);
+    font-weight: 700;
+    font-size: 1rem;
+  }
+
+  .turn-num {
+    font-family: 'Cinzel', serif;
+    font-size: 0.76rem;
+    color: var(--gold-dim);
+    letter-spacing: 0.08em;
+  }
+
+  #hexCanvas {
+    display: block;
+    border: 1px solid var(--gold-dim);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    filter: drop-shadow(0 0 16px rgba(201,168,76,0.06));
+  }
+
+  /* Hex select mode notice (below canvas) */
+  .hex-select-notice {
+    display: none;
+    background: rgba(58,138,69,0.15);
+    border: 1px solid var(--green);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    padding: 7px 12px;
+    font-family: 'Cinzel', serif;
+    font-size: 0.72rem;
+    color: var(--green-light);
+    letter-spacing: 0.05em;
+    text-align: center;
+  }
+
+  .hex-select-notice.visible { display: block; }
+
+  /* ===== CITY INFO PANEL ===== */
+  .city-info-panel {
+    flex: 1;
+    min-height: 388px;
+    background: var(--bg-panel);
+    border: 1px solid var(--gold-dim);
+    border-radius: 6px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .city-info-panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  }
+
+  .panel-label {
+    font-family: 'Cinzel', serif;
+    font-size: 0.58rem;
+    letter-spacing: 0.18em;
+    color: var(--gold-dim);
+    text-transform: uppercase;
+    margin-bottom: 3px;
+  }
+
+  .city-default-msg {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+    font-style: italic;
+    font-size: 0.83rem;
+    text-align: center;
+    line-height: 1.8;
+  }
+
+  #cityDetails {
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .city-hex-name {
+    font-family: 'Cinzel', serif;
+    font-size: 1.0rem;
+    font-weight: 700;
+    color: var(--gold);
+  }
+
+  .city-owner-badge {
+    display: inline-block;
+    font-family: 'Cinzel', serif;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    padding: 2px 8px;
+    border-radius: 3px;
+    margin-top: 3px;
+  }
+
+  .city-owner-badge.player {
+    background: rgba(46,109,164,0.25);
+    border: 1px solid var(--blue);
+    color: var(--blue-light);
+  }
+
+  .city-owner-badge.cpu {
+    background: rgba(231,76,60,0.12);
+    border: 1px solid #8a3a2c;
+    color: #e08070;
+  }
+
+  .city-owner-badge.boss {
+    background: rgba(150,30,30,0.2);
+    border: 1px solid #c0392b;
+    color: #ff8070;
+  }
+
+  .city-level-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .city-level-dots {
+    display: flex;
+    gap: 4px;
+  }
+
+  .level-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1px solid var(--gold-dim);
+  }
+  .level-dot.filled {
+    background: var(--gold);
+    border-color: var(--gold);
+    box-shadow: 0 0 5px rgba(201,168,76,0.5);
+  }
+  .level-dot.empty  { background: rgba(100,100,100,0.1); }
+
+  .city-section {
+    background: rgba(0,0,0,0.18);
+    border: 1px solid rgba(201,168,76,0.08);
+    border-radius: 4px;
+    padding: 8px 10px;
+  }
+
+  .city-section .panel-label { margin-bottom: 5px; }
+
+  .info-row {
+    font-size: 0.77rem;
+    color: var(--text-dim);
+    padding: 2px 0;
+    line-height: 1.4;
+  }
+
+  .info-row.player-unit { color: var(--blue-light); }
+  .info-row.fog         { font-style: italic; }
+
+  /* Log area */
+  .log-area {
+    flex: 1;
+    overflow-y: auto;
+    font-size: 0.75rem;
+    line-height: 1.55;
+    color: var(--text-dim);
+    min-height: 50px;
+    max-height: 110px;
+  }
+  .log-area::-webkit-scrollbar { width: 3px; }
+  .log-area::-webkit-scrollbar-thumb { background: var(--gold-dim); border-radius: 2px; }
+  .log-entry { padding: 0; }
+  .log-entry.player-log { color: var(--blue-light); }
+  .log-entry.system-log { color: var(--gold); }
+  .log-entry.error-log  { color: var(--red-light); }
+
+  /* ===== CARDS SECTION ===== */
+  .cards-section {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    min-height: 150px;
+  }
+
+  /* ===== PILE AREAS (Deck / Discard) ===== */
+  .pile-area {
+    flex-shrink: 0;
+    width: 88px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .pile-label {
+    font-family: 'Cinzel', serif;
+    font-size: 0.6rem;
+    letter-spacing: 0.15em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+
+  .pile-wrap {
+    position: relative;
+    width: 76px;
+    height: 112px;
+  }
+
+  /* Deck shadow layers */
+  .deck-sh2 {
+    position: absolute;
+    top: 4px; left: 4px;
+    width: 68px; height: 106px;
+    background: #131e32;
+    border: 1px solid var(--gold-dim);
+    border-radius: 5px;
+    opacity: 0.6;
+  }
+
+  .deck-sh1 {
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 68px; height: 106px;
+    background: #161f34;
+    border: 1px solid var(--gold-dim);
+    border-radius: 5px;
+    opacity: 0.8;
+  }
+
+  .pile-card {
+    position: absolute;
+    top: 0; left: 0;
+    width: 68px; height: 106px;
+    background: linear-gradient(145deg, #1a2840, #0e1625);
+    border: 1px solid var(--gold-dim);
+    border-radius: 5px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+  }
+
+  .pile-card.discard-face {
+    background: linear-gradient(145deg, #241414, #140a0a);
+    border-color: rgba(120,60,60,0.5);
+  }
+
+  .pile-icon { font-size: 1.3rem; opacity: 0.4; }
+
+  .pile-count {
+    font-family: 'Cinzel', serif;
+    font-size: 0.78rem;
+    color: var(--gold-dim);
+  }
+
+  .pile-top-name {
+    font-size: 0.55rem;
+    font-family: 'Cinzel', serif;
+    color: rgba(180,130,110,0.45);
+    text-align: center;
+    padding: 0 4px;
+    line-height: 1.3;
+  }
+
+  /* ===== END TURN BUTTON ===== */
+  .btn-turn-end {
+    width: 84px;
+    padding: 9px 5px;
+    background: linear-gradient(135deg, #1a3050, #0e1e35);
+    border: 1px solid var(--blue);
+    border-radius: 5px;
+    color: var(--blue-light);
+    font-family: 'Cinzel', serif;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+    line-height: 1.5;
+  }
+
+  .btn-turn-end:hover {
+    border-color: var(--blue-light);
+    box-shadow: 0 0 14px rgba(74,159,212,0.3);
+    transform: translateY(-1px);
+  }
+
+  /* ===== HAND AREA ===== */
+  .hand-area {
+    flex: 1;
+    display: flex;
+    gap: 6px;
+    align-items: flex-end;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    padding-top: 4px;
+  }
+
+  .hand-area::-webkit-scrollbar { height: 4px; }
+  .hand-area::-webkit-scrollbar-thumb { background: var(--gold-dim); border-radius: 2px; }
+
+  /* ===== CARD STYLES ===== */
+  .card {
+    flex-shrink: 0;
+    width: 84px;
+    height: 122px;
+    background: linear-gradient(155deg, #1e2a42, #131826);
+    border: 1.5px solid var(--gold-dim);
+    border-radius: 6px;
+    padding: 7px 6px 5px;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    user-select: none;
+  }
+
+  .card:hover:not(.unplayable):not(.awaiting-hex) {
+    border-color: rgba(201,168,76,0.6);
+    transform: translateY(-6px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+  }
+
+  .card.selected {
+    border-color: var(--gold);
+    border-width: 2px;
+    transform: translateY(-10px);
+    box-shadow: 0 0 18px rgba(201,168,76,0.4), 0 10px 28px rgba(0,0,0,0.65);
+    background: linear-gradient(155deg, #28340f, #191f08);
+  }
+
+  .card.awaiting-hex {
+    border-color: var(--green-light);
+    border-width: 2px;
+    transform: translateY(-6px);
+    animation: awaiting 1.2s ease-in-out infinite;
+  }
+
+  @keyframes awaiting {
+    0%,100% { box-shadow: 0 0 10px rgba(92,186,104,0.25); }
+    50%     { box-shadow: 0 0 22px rgba(92,186,104,0.7); }
+  }
+
+  .card.unplayable {
+    opacity: 0.38;
+    cursor: not-allowed;
+  }
+
+  .card-cost {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 19px;
+    height: 19px;
+    border-radius: 50%;
+    background: rgba(201,168,76,0.12);
+    border: 1px solid var(--gold-dim);
+    font-family: 'Cinzel', serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--gold);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .card-cat-bar {
+    height: 2.5px;
+    border-radius: 2px;
+    margin-bottom: 5px;
+    margin-top: 1px;
+  }
+  .cat-resource { background: linear-gradient(90deg, #c9a84c, #6a5020); }
+  .cat-hire     { background: linear-gradient(90deg, #2e6da4, #1a3a58); }
+  .cat-strategy { background: linear-gradient(90deg, #6a38a0, #3a1860); }
+  .cat-develop  { background: linear-gradient(90deg, #3a8a45, #1a4520); }
+
+  .card-name {
+    font-family: 'Cinzel', serif;
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: var(--text-main);
+    line-height: 1.3;
+    padding-right: 18px;
+    margin-bottom: 4px;
+  }
+
+  .card-desc {
+    font-size: 0.64rem;
+    color: var(--text-dim);
+    line-height: 1.45;
+    flex: 1;
+  }
+
+  .card-hint {
+    font-size: 0.56rem;
+    color: rgba(201,168,76,0.4);
+    text-align: center;
+    margin-top: 3px;
+    font-style: italic;
+    transition: color 0.15s;
+  }
+
+  .card.selected .card-hint { color: rgba(92,186,104,0.75); }
+  .card.awaiting-hex .card-hint { color: rgba(92,186,104,0.9); }
+
+  /* ===== TOOLTIP ===== */
+  .hex-tooltip {
+    position: fixed;
+    background: var(--bg-panel);
+    border: 1px solid var(--gold-dim);
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 0.76rem;
+    color: var(--gold);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 100;
+    font-family: 'Cinzel', serif;
+  }
+
+  .hex-tooltip.visible { opacity: 1; }
+
+  /* ===== EVENT OVERLAY ===== */
+  .event-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(5, 8, 14, 0.88);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+  .event-overlay.visible { display: flex; }
+
+  .event-modal {
+    width: 520px;
+    background: var(--bg-panel);
+    border: 1px solid var(--gold-dim);
+    border-radius: 8px;
+    padding: 28px 30px 24px;
+    position: relative;
+    box-shadow: 0 0 60px rgba(0,0,0,0.8), 0 0 30px rgba(201,168,76,0.08);
+    animation: eventAppear 0.25s ease;
+  }
+
+  @keyframes eventAppear {
+    from { opacity: 0; transform: scale(0.96) translateY(8px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  .event-modal::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    border-radius: 8px 8px 0 0;
+  }
+  .event-modal.type-card::before   { background: linear-gradient(90deg, transparent, #c9a84c, transparent); }
+  .event-modal.type-raid::before   { background: linear-gradient(90deg, transparent, #e74c3c, transparent); }
+
+  .event-tag {
+    font-family: 'Cinzel', serif;
+    font-size: 0.58rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    padding: 3px 10px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+  .event-tag.type-card { background: rgba(201,168,76,0.12); color: var(--gold); border: 1px solid var(--gold-dim); }
+  .event-tag.type-raid { background: rgba(231,76,60,0.12);  color: #e08070;      border: 1px solid #6a2a20; }
+
+  .event-title {
+    font-family: 'Cinzel', serif;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-main);
+    margin-bottom: 14px;
+    line-height: 1.3;
+  }
+
+  .event-flavor {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    line-height: 1.75;
+    margin-bottom: 18px;
+    font-style: italic;
+    border-left: 2px solid var(--gold-dim);
+    padding-left: 12px;
+  }
+
+  .event-situation {
+    font-size: 0.84rem;
+    color: var(--text-main);
+    line-height: 1.65;
+    margin-bottom: 20px;
+    background: rgba(0,0,0,0.2);
+    border: 1px solid rgba(201,168,76,0.1);
+    border-radius: 5px;
+    padding: 12px 14px;
+  }
+
+  .event-choices {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  .event-choice-btn {
+    background: linear-gradient(135deg, #1a2538, #111824);
+    border: 1px solid var(--gold-dim);
+    border-radius: 5px;
+    padding: 11px 14px;
+    color: var(--text-main);
+    font-family: 'Crimson Text', serif;
+    font-size: 0.9rem;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.18s;
+    line-height: 1.5;
+  }
+
+  .event-choice-btn:hover {
+    border-color: var(--gold);
+    background: linear-gradient(135deg, #22304a, #161e30);
+    color: var(--gold);
+    transform: translateX(3px);
+    box-shadow: 0 0 14px rgba(201,168,76,0.15);
+  }
+
+  .event-choice-btn .choice-label {
+    font-family: 'Cinzel', serif;
+    font-size: 0.62rem;
+    color: var(--gold-dim);
+    letter-spacing: 0.1em;
+    display: block;
+    margin-bottom: 3px;
+  }
+
+  .event-choice-btn .choice-effect {
+    font-size: 0.76rem;
+    color: var(--text-dim);
+    margin-top: 4px;
+    display: block;
+  }
+
+  /* Result view */
+  .event-result {
+    display: none;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .event-result.visible { display: flex; }
+
+  .event-result-text {
+    font-size: 0.88rem;
+    color: var(--text-main);
+    line-height: 1.7;
+    background: rgba(0,0,0,0.2);
+    border: 1px solid rgba(201,168,76,0.1);
+    border-radius: 5px;
+    padding: 14px 16px;
+  }
+
+  .event-result-gain {
+    font-family: 'Cinzel', serif;
+    font-size: 0.82rem;
+    padding: 8px 12px;
+    border-radius: 4px;
+    text-align: center;
+  }
+  .event-result-gain.good { background: rgba(58,138,69,0.15); border: 1px solid var(--green); color: var(--green-light); }
+  .event-result-gain.bad  { background: rgba(231,76,60,0.1);  border: 1px solid #8a3a2c;     color: #e08070; }
+  .event-result-gain.neutral { background: rgba(201,168,76,0.1); border: 1px solid var(--gold-dim); color: var(--gold); }
+
+  .event-close-btn {
+    background: linear-gradient(135deg, #1a3050, #0e1e35);
+    border: 1px solid var(--blue);
+    border-radius: 5px;
+    padding: 10px;
+    color: var(--blue-light);
+    font-family: 'Cinzel', serif;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: all 0.18s;
+    text-align: center;
+  }
+  .event-close-btn:hover {
+    border-color: var(--blue-light);
+    box-shadow: 0 0 14px rgba(74,159,212,0.3);
+  }
+</style>
+  <!-- React + Babel for battle phase -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+
+<header>
+  <h1>🏰 内政フェーズ + イベントフェーズ プロトタイプ</h1>
+  <p>軍人勢力 — ターン終了時にランダムイベント発生（カード習得 / 襲撃）</p>
+</header>
+
+<div class="wrapper">
+
+  <!-- ===== TOP: MAP + CITY INFO ===== -->
+  <div class="top-section">
+
+    <!-- MAP COLUMN -->
+    <div class="map-col">
+      <div class="map-status-bar" id="mapStatusBar">
+        <div class="resources">
+          <span class="res-item">
+            <span class="res-icon">💰</span>
+            <span>金</span>
+            <span class="res-val" id="goldVal">5</span>
+          </span>
+          <span class="res-item">
+            <span class="res-icon">⚜</span>
+            <span>権威</span>
+            <span class="res-val" id="authorityVal">1</span>
+          </span>
+        </div>
+        <div class="turn-info">
+          <span class="ap-display">
+            AP <span class="ap-val" id="apCur">3</span>/<span id="apMax">3</span>
+          </span>
+          <span class="turn-num" id="turnNum">ターン 1</span>
+        </div>
+      </div>
+
+      <canvas id="hexCanvas" width="548" height="360"></canvas>
+
+      <div class="hex-select-notice" id="hexSelectNotice">
+        🏰 都市整備 — 自軍領地のHEXをクリック（もう一度カードをクリックでキャンセル）
+      </div>
+    </div>
+
+    <!-- CITY INFO PANEL -->
+    <div class="city-info-panel">
+      <div class="panel-label">都市情報</div>
+
+      <div class="city-default-msg" id="cityDefaultMsg">
+        HEXにマウスを<br>合わせると<br>都市情報を表示します
+      </div>
+
+      <div id="cityDetails">
+        <div>
+          <div class="city-hex-name" id="cityHexName">—</div>
+          <div class="city-owner-badge player" id="cityOwnerBadge">—</div>
+        </div>
+        <div class="city-level-row">
+          <span class="panel-label" style="margin:0;">都市Lv</span>
+          <div class="city-level-dots" id="cityLevelDots"></div>
+        </div>
+        <div class="city-section">
+          <div class="panel-label">施設</div>
+          <div id="facilityList"></div>
+        </div>
+        <div class="city-section">
+          <div class="panel-label">駐留ユニット</div>
+          <div id="unitList"></div>
+        </div>
+      </div>
+
+      <!-- Log -->
+      <div style="margin-top:auto;">
+        <div class="panel-label">行動ログ</div>
+        <div class="log-area" id="logArea"></div>
+      </div>
+    </div>
+
+  </div><!-- end top-section -->
+
+  <!-- ===== BOTTOM: CARDS ===== -->
+  <div class="cards-section">
+
+    <!-- Deck -->
+    <div class="pile-area">
+      <div class="pile-label">山札</div>
+      <div class="pile-wrap" id="deckWrap">
+        <div class="deck-sh2"></div>
+        <div class="deck-sh1"></div>
+        <div class="pile-card">
+          <div class="pile-icon">🂠</div>
+          <div class="pile-count" id="deckCount">5</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hand -->
+    <div class="hand-area" id="handArea"></div>
+
+    <!-- Discard + End Turn -->
+    <div class="pile-area" style="width:92px;">
+      <div class="pile-label">捨て札</div>
+      <div class="pile-wrap">
+        <div class="pile-card discard-face" id="discardFace">
+          <div class="pile-icon">🃟</div>
+          <div class="pile-count" id="discardCount">0</div>
+        </div>
+      </div>
+      <button class="btn-turn-end" id="btnTurnEnd" onclick="endTurn()">
+        内政<br>ターンエンド
+      </button>
+    </div>
+
+  </div><!-- end cards-section -->
+
+</div><!-- end wrapper -->
+
+<div class="hex-tooltip" id="hexTooltip"></div>
+
+<script>
+// ============================================================
+//  HEX GRID
+// ============================================================
+const HEX_SIZE = 52;
+const CW = 548, CH = 360;
+const HR   = Math.sqrt(3) * HEX_SIZE;
+const VR   = 1.5 * HEX_SIZE;
+const HALF = HR / 2;
+const OX   = (CW - 3 * HR) / 2 + 4;  // left offset (center 4 cols, nudge right)
+const ROW_Y = [88, 88 + VR, 88 + 2 * VR];
+
+// Pointy-top offset hex grid: 3 rows × 4 cols staggered
+const hexDefs = [
+  { id:1,  cx: OX + HALF + 0*HR, cy: ROW_Y[0] },
+  { id:2,  cx: OX + HALF + 1*HR, cy: ROW_Y[0] },
+  { id:3,  cx: OX + HALF + 2*HR, cy: ROW_Y[0] },
+  { id:4,  cx: OX + 0*HR,        cy: ROW_Y[1] },
+  { id:5,  cx: OX + 1*HR,        cy: ROW_Y[1] },
+  { id:6,  cx: OX + 2*HR,        cy: ROW_Y[1] },
+  { id:7,  cx: OX + 3*HR,        cy: ROW_Y[1] },
+  { id:8,  cx: OX + HALF + 0*HR, cy: ROW_Y[2] },
+  { id:9,  cx: OX + HALF + 1*HR, cy: ROW_Y[2] },
+  { id:10, cx: OX + HALF + 2*HR, cy: ROW_Y[2] },
+];
+
+function hexById(id) { return hexDefs.find(h => h.id === id); }
+
+// ============================================================
+//  GAME STATE
+// ============================================================
+let gold = 5, authority = 1;
+let actionPoints = 3;
+const maxAP = 3;
+let turnCount = 1;
+
+let hoveredHex = null;
+let selectedCardId = null;
+let waitingHex = false;      // 都市整備: awaiting hex click
+let pendingCardId = null;    // card waiting for hex selection
+
+// Cities: HEX 4 (player Lv2), HEX 7 (CPU boss Lv2), rest CPU Lv1
+const cities = {
+  1:  { level:1, owner:'cpu',    facilities:[], name:'北の砦' },
+  2:  { level:1, owner:'cpu',    facilities:[], name:'峠の村' },
+  3:  { level:1, owner:'cpu',    facilities:[], name:'東の草原' },
+  4:  { level:2, owner:'player', facilities:[], name:'王城' },
+  5:  { level:1, owner:'cpu',    facilities:[], name:'中央平原' },
+  6:  { level:1, owner:'cpu',    facilities:[], name:'交差路' },
+  7:  { level:2, owner:'cpu',    facilities:[], name:'敵本城', boss:true },
+  8:  { level:1, owner:'cpu',    facilities:[], name:'南の丘' },
+  9:  { level:1, owner:'cpu',    facilities:[], name:'南東の森' },
+  10: { level:1, owner:'cpu',    facilities:[], name:'海岸の港' },
+};
+
+// Player units on HEX 4
+// 軍団データ（1軍団 = HEX + 1〜6ユニットの配列）
+let playerArmies = [
+  {
+    id:'A1', hex:4,
+    units:[
+      { id:'P1-1', name:'槍兵',     position:'前衛', hp:14, maxHp:14, atk:3, morale:6 },
+      { id:'P1-2', name:'重装歩兵', position:'前衛', hp:16, maxHp:16, atk:2, morale:7 },
+      { id:'P1-3', name:'弓兵',     position:'後衛', hp:10, maxHp:10, atk:4, morale:5 },
+      { id:'P1-4', name:'騎馬兵',   position:'前衛', hp:12, maxHp:12, atk:5, morale:6 },
+    ]
+  },
+  {
+    id:'A2', hex:8,
+    units:[
+      { id:'P2-1', name:'槍兵',   position:'前衛', hp:14, maxHp:14, atk:3, morale:6 },
+      { id:'P2-2', name:'弓兵',   position:'後衛', hp:10, maxHp:10, atk:4, morale:5 },
+      { id:'P2-3', name:'斥候',   position:'後衛', hp:8,  maxHp:8,  atk:3, morale:4 },
+    ]
+  },
+];
+
+// 後方互換：内政フェーズ描画で使う平坦なユニット配列（hex付き）
+function getPlayerUnitsFlat() {
+  return playerArmies.flatMap(a => a.units.map(u => ({ ...u, hex: a.hex, armyId: a.id })));
+}
+
+// CPU軍団（霧の中：種類は不明、count表示）
+let cpuArmies = [
+  { id:'C1', hex:2, count:3 },
+  { id:'C2', hex:3, count:5 },
+  { id:'C3', hex:7, count:4 },
+];
+
+// ============================================================
+//  CARD DEFINITIONS
+// ============================================================
+const CAT_CLASS = {
+  resource: 'cat-resource',
+  hire:     'cat-hire',
+  strategy: 'cat-strategy',
+  develop:  'cat-develop',
+};
+
+const cardDefs = {
+  gold: {
+    key:'gold', name:'金を得る', cost:1, cat:'resource',
+    desc:'金 +2',
+    play(id) {
+      gold += 2;
+      addLog('「金を得る」→ 金 +2', 'player-log');
+      flashRes('goldVal');
+      finalizePlay(id);
+    }
+  },
+  hire_regular: {
+    key:'hire_regular', name:'正規兵の雇用', cost:1, cat:'hire',
+    desc:'候補1体から選んで雇用',
+    play(id) {
+      addLog('「正規兵の雇用」（雇用UIは未実装）', 'system-log');
+      finalizePlay(id);
+    }
+  },
+  hire_merc: {
+    key:'hire_merc', name:'傭兵の雇用', cost:1, cat:'hire',
+    desc:'候補3体から選んで雇用',
+    play(id) {
+      addLog('「傭兵の雇用」（雇用UIは未実装）', 'system-log');
+      finalizePlay(id);
+    }
+  },
+  strategy: {
+    key:'strategy', name:'調略', cost:1, cat:'strategy',
+    desc:'候補3枚から戦闘カードを1枚獲得',
+    play(id) {
+      addLog('「調略」（カード獲得UIは未実装）', 'system-log');
+      finalizePlay(id);
+    }
+  },
+  city_dev: {
+    key:'city_dev', name:'都市整備', cost:2, cat:'develop',
+    desc:'対象HEXの都市レベルを+1（最大Lv4）',
+    play(id) {
+      // Enter hex-selection mode
+      waitingHex = true;
+      pendingCardId = id;
+      selectedCardId = id;
+      document.getElementById('hexSelectNotice').classList.add('visible');
+      addLog('「都市整備」選択中 → 自軍HEXをクリック', 'system-log');
+      renderHand();
+      render();
+    }
+  },
+};
+
+// ============================================================
+//  DECK / HAND / DISCARD
+// ============================================================
+let cardIdSeq = 0;
+function makeCard(key) {
+  return { id:`c${cardIdSeq++}`, ...cardDefs[key] };
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length-1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
+
+// Turn-1 exception: 6 basic cards + 1 都市整備 = 7 cards
+let hand = [
+  makeCard('gold'), makeCard('gold'), makeCard('gold'),
+  makeCard('hire_regular'), makeCard('hire_merc'), makeCard('strategy'),
+  makeCard('city_dev'),
+];
+
+// Draw pile: 5 random basic cards
+const basicPool = ['gold','gold','gold','hire_regular','hire_merc','strategy'];
+let deck = shuffle([...basicPool]).slice(0,5).map(k => makeCard(k));
+let discard = [];
+
+// ============================================================
+//  CARD PLAY LOGIC
+// ============================================================
+function canPlay(card) {
+  return actionPoints >= card.cost && !waitingHex;
+}
+
+/** Common finalizer: deduct AP, move card hand→discard */
+function finalizePlay(cardId) {
+  const idx = hand.findIndex(c => c.id === cardId);
+  if (idx === -1) return;
+  actionPoints -= hand[idx].cost;
+  discard.push(hand[idx]);
+  hand.splice(idx, 1);
+  selectedCardId = null;
+  updateUI();
+  renderHand();
+  render();
+}
+
+function onCardClick(cardId) {
+  // In hex-select mode: only clicking the pending card cancels
+  if (waitingHex) {
+    if (cardId === pendingCardId) cancelHexSelect();
+    return;
+  }
+
+  const card = hand.find(c => c.id === cardId);
+  if (!card) return;
+
+  if (!canPlay(card)) {
+    addLog(`行動ポイント不足（必要: ${card.cost}、残り: ${actionPoints}）`, 'error-log');
+    return;
+  }
+
+  if (selectedCardId === cardId) {
+    // 2nd click → play
+    selectedCardId = null;
+    card.play(cardId);
+  } else {
+    // 1st click → select
+    selectedCardId = cardId;
+    renderHand();
+  }
+}
+
+function cancelHexSelect() {
+  waitingHex = false;
+  pendingCardId = null;
+  selectedCardId = null;
+  document.getElementById('hexSelectNotice').classList.remove('visible');
+  addLog('都市整備をキャンセル', 'system-log');
+  renderHand();
+  render();
+}
+
+// ============================================================
+//  HEX SELECTION (都市整備)
+// ============================================================
+function onHexClickCityDev(hexId) {
+  const city = cities[hexId];
+  if (city.owner !== 'player') {
+    addLog(`HEX ${hexId} は自軍領地ではありません`, 'error-log');
+    return;
+  }
+  if (city.level >= 4) {
+    addLog(`${city.name}（HEX ${hexId}）は既に最大レベル（Lv4）です`, 'error-log');
+    return;
+  }
+
+  const prev = city.level;
+  city.level++;
+  let bonusMsg = '';
+  if (city.level === 2) {
+    bonusMsg = ' ✦ ランダム内政カードを獲得（未実装）';
+  } else if (city.level === 4) {
+    authority++;
+    flashRes('authorityVal');
+    bonusMsg = ' ✦ 権威 +1';
+  }
+  addLog(`${city.name}（HEX ${hexId}）Lv${prev} → Lv${city.level}${bonusMsg}`, 'player-log');
+
+  const cid = pendingCardId;
+  waitingHex = false;
+  pendingCardId = null;
+  document.getElementById('hexSelectNotice').classList.remove('visible');
+
+  finalizePlay(cid);
+  updateCityPanel(hexId);
+}
+
+// ============================================================
+//  TURN END → イベント起動
+// ============================================================
+function endTurn() {
+  if (waitingHex) cancelHexSelect();
+
+  // 手札をすべて捨て札へ
+  discard.push(...hand);
+  hand = [];
+  selectedCardId = null;
+
+  addLog(`内政フェーズ終了 → 移動フェーズへ`, 'system-log');
+  renderHand();
+  startMovePhase();
+}
+
+// ============================================================
+//  EVENT SYSTEM
+// ============================================================
+
+// カード習得イベント定義（候補から1枚選択）
+const CARD_EVENT_CHOICES = [
+  {
+    key: 'cavalry_charge',
+    name: '騎馬突撃',
+    cat: '戦闘',
+    desc: '前衛全体に ATK×1.5 のダメージ。騎兵ユニットが1体以上いる場合 ATK×2',
+    effect: () => { addLog('「騎馬突撃」をデッキに追加', 'player-log'); deck.push(makeCard('gold')); /* 仮 */ }
+  },
+  {
+    key: 'forced_march',
+    name: '強行軍',
+    cat: '戦闘',
+    desc: 'このターン、行動済みのユニットを再行動させる。士気 -1',
+    effect: () => { addLog('「強行軍」をデッキに追加', 'player-log'); deck.push(makeCard('hire_regular')); /* 仮 */ }
+  },
+  {
+    key: 'ambush',
+    name: '伏兵',
+    cat: '調略',
+    desc: '次の戦闘開始時、相手の後衛1体に ATK×2 の先制攻撃',
+    effect: () => { addLog('「伏兵」をデッキに追加', 'player-log'); deck.push(makeCard('strategy')); /* 仮 */ }
+  },
+  {
+    key: 'supply_line',
+    name: '兵站確保',
+    cat: '内政',
+    desc: '金 +3。次のターン開始時にさらに金 +2',
+    effect: () => { gold += 3; flashRes('goldVal'); addLog('「兵站確保」をデッキに追加。金 +3', 'player-log'); deck.push(makeCard('gold')); updateUI(); }
+  },
+];
+
+// イベント定義
+const EVENT_DEFS = {
+  card_acquire: {
+    type: 'card',
+    title: '流浪の軍師が訪れた',
+    flavor: '陣営の外に、ひとりの老武将が立っていた。その眼には、幾多の戦場を渡り歩いてきた者だけが持つ、鋭い光があった。',
+    situation: '「将よ、あなたの戦い振りを遠くから見ておりました。よろしければ、私の知る戦術のひとつをお教えしましょう」老武将はそう言って、三つの巻物を差し出した。',
+    buildChoices: () => {
+      // ランダムに3択提示
+      const pool = [...CARD_EVENT_CHOICES];
+      shuffle(pool);
+      const picks = pool.slice(0, 3);
+      return picks.map(c => ({
+        label: `${c.cat}カードを習得`,
+        text: `【${c.name}】${c.desc}`,
+        effect: c.effect,
+        resultText: `老武将は満足そうに頷き、「この戦術、必ずやお役に立てましょう」と言い残して立ち去った。`,
+        resultGain: `【${c.name}】をデッキに加えた`,
+        gainType: 'good',
+      }));
+    },
+  },
+
+  raid: {
+    type: 'raid',
+    title: '敵の奇襲部隊が現れた',
+    flavor: '夜半、物見の兵が血相を変えて報告に来た。「敵の遊軍が我が領内に侵入しております！」',
+    situation: () => {
+      // プレイヤーの自軍HEXをランダムに1つ選ぶ
+      const playerHexes = Object.entries(cities).filter(([,c]) => c.owner === 'player').map(([id]) => Number(id));
+      const targetId = playerHexes[Math.floor(Math.random() * playerHexes.length)];
+      const targetCity = cities[targetId];
+      return { targetId, targetCity };
+    },
+    buildChoices: (ctx) => {
+      const { targetId, targetCity } = ctx;
+      return [
+        {
+          label: '守備隊を投入して防衛する',
+          text: `${targetCity.name}（HEX ${targetId}）に兵を急派し、正面から迎撃する。金 -2 を消費するが、HEXを守り切れる可能性が高い。`,
+          effect: () => {
+            if (gold >= 2) {
+              gold -= 2; flashRes('goldVal'); updateUI();
+              addLog(`${targetCity.name}（HEX ${targetId}）の防衛に成功。金 -2`, 'player-log');
+            } else {
+              addLog(`金が不足しているため守備隊が崩壊。${targetCity.name}（HEX ${targetId}）の都市Lvが低下`, 'error-log');
+              if (targetCity.level > 1) targetCity.level--;
+              render(); updateCityPanel(null);
+            }
+          },
+          resultText: (gold_before) => gold_before >= 2
+            ? `守備隊は奇襲部隊を撃退した。深夜の戦いは短く激しく、夜明けには敵の姿は消えていた。`
+            : `金が尽き、守備隊は組織的な防衛ができなかった。敵は一部の施設を破壊して去った。`,
+          resultGain: (gold_before) => gold_before >= 2 ? '防衛成功 / 金 -2' : `${targetCity.name} 都市Lv -1`,
+          gainType: (gold_before) => gold_before >= 2 ? 'neutral' : 'bad',
+        },
+        {
+          label: '住民を避難させ、一時的に放棄する',
+          text: `戦力を温存するため、${targetCity.name}（HEX ${targetId}）を一時放棄する。HEXの占領は失わないが、都市Lv -1 のダメージを受ける。`,
+          effect: () => {
+            if (targetCity.level > 1) {
+              targetCity.level--;
+              addLog(`${targetCity.name}（HEX ${targetId}）を一時放棄。都市Lv -1`, 'player-log');
+            } else {
+              addLog(`${targetCity.name}（HEX ${targetId}）を放棄（Lv1のため低下なし）`, 'player-log');
+            }
+            render(); updateCityPanel(null);
+          },
+          resultText: () => `住民は山中へと逃れた。奇襲部隊は略奪の後に去ったが、領地は荒らされた。兵力を温存できたのが唯一の収穫だった。`,
+          resultGain: () => `${targetCity.name} 都市Lv -1（兵力温存）`,
+          gainType: () => 'bad',
+        },
+        {
+          label: '名声に賭けて交渉を試みる',
+          text: `使者を送り、金品を贈ることで奇襲部隊の撤退を交渉する。金 -3 を消費するが、HEXへの被害を最小限に抑えられる。`,
+          effect: () => {
+            if (gold >= 3) {
+              gold -= 3; flashRes('goldVal'); updateUI();
+              addLog(`交渉成功。${targetCity.name}（HEX ${targetId}）への被害を回避。金 -3`, 'player-log');
+            } else {
+              gold = 0; updateUI();
+              addLog(`金が不足し交渉決裂。${targetCity.name}（HEX ${targetId}）は被害を受けた`, 'error-log');
+              if (targetCity.level > 1) targetCity.level--;
+              render(); updateCityPanel(null);
+            }
+          },
+          resultText: (gold_before) => gold_before >= 3
+            ? `使者は黄金を携えて敵陣に向かい、翌朝には合意文書を持ち帰った。敵の将は財を得て兵を引いた。`
+            : `金が底をつき、使者は手ぶらで戻ってきた。交渉の失敗は敵に付け入る隙を与えてしまった。`,
+          resultGain: (gold_before) => gold_before >= 3 ? '交渉成功 / 金 -3' : `交渉失敗 / ${targetCity.name} 都市Lv -1`,
+          gainType: (gold_before) => gold_before >= 3 ? 'neutral' : 'bad',
+        },
+      ];
+    },
+  },
+};
+
+let currentEventChoices = [];
+
+function triggerRandomEvent() {
+  const eventKeys = Object.keys(EVENT_DEFS);
+  const key = eventKeys[Math.floor(Math.random() * eventKeys.length)];
+  const def = EVENT_DEFS[key];
+
+  const modalEl     = document.getElementById('eventModal');
+  const overlayEl   = document.getElementById('eventOverlay');
+  const tagEl       = document.getElementById('eventTag');
+  const titleEl     = document.getElementById('eventTitle');
+  const flavorEl    = document.getElementById('eventFlavor');
+  const choicesEl   = document.getElementById('eventChoices');
+  const resultEl    = document.getElementById('eventResult');
+  const situationEl = document.getElementById('eventSituation');
+
+  // Reset result
+  resultEl.style.display = 'none';
+  choicesEl.style.display = 'flex';
+
+  // Set type styling
+  modalEl.className = `event-modal type-${def.type}`;
+  tagEl.className   = `event-tag type-${def.type}`;
+  tagEl.textContent = def.type === 'card' ? '📜 カード習得イベント' : '⚔ 襲撃イベント';
+  titleEl.textContent = def.title;
+  flavorEl.textContent = def.flavor;
+
+  // Build context for raid
+  let choices;
+  if (def.type === 'raid') {
+    const ctx = def.situation();
+    situationEl.textContent = `敵の奇襲部隊が ${ctx.targetCity.name}（HEX ${ctx.targetId}）を狙っている。いかに対処するか？`;
+    choices = def.buildChoices(ctx);
+  } else {
+    situationEl.textContent = def.situation;
+    choices = def.buildChoices();
+  }
+
+  currentEventChoices = choices;
+  choicesEl.innerHTML = '';
+
+  choices.forEach((choice, idx) => {
+    const btn = document.createElement('button');
+    btn.style.cssText = 'background:linear-gradient(135deg,#1a2538,#111824);border:1px solid #7a6030;border-radius:5px;padding:11px 14px;color:#d4c4a0;font-family:"Crimson Text",serif;font-size:0.9rem;cursor:pointer;text-align:left;width:100%;line-height:1.5;margin-bottom:2px;';
+    btn.innerHTML = `<span style="font-family:Cinzel,serif;font-size:0.62rem;color:#7a6030;letter-spacing:0.1em;display:block;margin-bottom:3px;">選択肢 ${idx + 1}</span>${choice.text}<span style="font-size:0.76rem;color:#6a7a90;margin-top:4px;display:block;">${choice.label}</span>`;
+    btn.addEventListener('click', () => resolveEventChoice(idx));
+    choicesEl.appendChild(btn);
+  });
+
+  overlayEl.style.display = 'flex';
+  addLog(`【イベント発生】${def.title}`, 'system-log');
+}
+
+function resolveEventChoice(idx) {
+  const choice = currentEventChoices[idx];
+  const goldBefore = gold;
+
+  // Execute effect
+  choice.effect();
+
+  // Show result
+  const choicesEl  = document.getElementById('eventChoices');
+  const resultEl   = document.getElementById('eventResult');
+  const resultText = document.getElementById('eventResultText');
+  const resultGain = document.getElementById('eventResultGain');
+
+  choicesEl.style.display = 'none';
+  resultEl.style.display = 'flex';
+
+  const text = typeof choice.resultText === 'function' ? choice.resultText(goldBefore) : choice.resultText;
+  const gain = typeof choice.resultGain === 'function' ? choice.resultGain(goldBefore) : choice.resultGain;
+  const type = typeof choice.gainType  === 'function' ? choice.gainType(goldBefore)  : choice.gainType;
+
+  resultText.textContent = text;
+  resultGain.textContent = gain;
+  const gainColors = {
+    good:    'background:rgba(58,138,69,0.15);border:1px solid #3a8a45;color:#5cba68;',
+    bad:     'background:rgba(231,76,60,0.1);border:1px solid #8a3a2c;color:#e08070;',
+    neutral: 'background:rgba(201,168,76,0.1);border:1px solid #7a6030;color:#c9a84c;',
+  };
+  resultGain.style.cssText = (gainColors[type] || gainColors.neutral) + 'font-family:Cinzel,serif;font-size:0.82rem;padding:8px 12px;border-radius:4px;text-align:center;';
+}
+
+function closeEvent() {
+  document.getElementById('eventOverlay').style.display = 'none';
+
+  // 内政フェーズ開始：ドロー・AP回復
+  if (deck.length < 4 && discard.length > 0) {
+    deck.push(...shuffle(discard));
+    discard = [];
+    addLog('山札をシャッフルして補充', 'system-log');
+  }
+  hand = [];
+  const draw = Math.min(4, deck.length);
+  for (let i = 0; i < draw; i++) hand.push(deck.pop());
+  actionPoints = maxAP;
+  selectedCardId = null;
+
+  addLog(`イベント終了 → 内政フェーズ開始`, 'system-log');
+  updateUI();
+  renderHand();
+  render();
+}
+
+// ============================================================
+//  CANVAS RENDERING
+// ============================================================
+const canvas  = document.getElementById('hexCanvas');
+const ctx     = canvas.getContext('2d');
+const tooltip = document.getElementById('hexTooltip');
+
+function drawHexPath(cx, cy, size) {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = (Math.PI / 3) * i - Math.PI / 6;
+    const px = cx + size * Math.cos(a);
+    const py = cy + size * Math.sin(a);
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+
+function render() {
+  ctx.clearRect(0, 0, CW, CH);
+
+  // Background
+  const bg = ctx.createRadialGradient(CW/2, CH/2, 40, CW/2, CH/2, 320);
+  bg.addColorStop(0, '#131926');
+  bg.addColorStop(1, '#0a0d12');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, CW, CH);
+
+  hexDefs.forEach(h => {
+    const city     = cities[h.id];
+    const isPlayer = city.owner === 'player';
+    const isHov    = hoveredHex === h.id;
+    const isBoss   = !!city.boss;
+
+    // Fill/stroke based on owner + state
+    let fill, stroke, sw;
+
+    if (waitingHex) {
+      const selectable = isPlayer && city.level < 4;
+      if (selectable) {
+        fill   = isHov ? '#163024' : '#0e201a';
+        stroke = isHov ? '#5cba68' : '#3a8a45';
+        sw     = isHov ? 2.5 : 2;
+      } else {
+        fill   = '#101010';
+        stroke = '#2a2a2a';
+        sw     = 1;
+      }
+    } else if (isPlayer) {
+      fill   = isHov ? '#1a2d4a' : '#111e32';
+      stroke = isHov ? '#4a9fd4' : '#2a5080';
+      sw     = isHov ? 2 : 1.5;
+    } else if (isBoss) {
+      fill   = isHov ? '#2a0e0e' : '#1e0808';
+      stroke = isHov ? '#c05040' : '#8a3020';
+      sw     = isHov ? 2.5 : 2;
+    } else {
+      fill   = isHov ? '#231212' : '#160a0a';
+      stroke = isHov ? '#a05040' : '#5a2828';
+      sw     = isHov ? 2 : 1.5;
+    }
+
+    // Draw hex body
+    drawHexPath(h.cx, h.cy, HEX_SIZE - 2);
+    ctx.fillStyle = fill; ctx.fill();
+    ctx.strokeStyle = stroke; ctx.lineWidth = sw; ctx.stroke();
+
+    // Inner subtle ring
+    drawHexPath(h.cx, h.cy, HEX_SIZE - 7);
+    ctx.strokeStyle = 'rgba(255,255,255,0.025)';
+    ctx.lineWidth = 1; ctx.stroke();
+
+    // HEX number (top-center)
+    ctx.fillStyle = isPlayer ? '#3a5a7a' : '#5a3a3a';
+    ctx.font = 'bold 10px Cinzel, serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(h.id, h.cx, h.cy - HEX_SIZE + 9);
+
+    // City level dots (4 dots below number)
+    for (let i = 0; i < 4; i++) {
+      const dx = h.cx - 6 + i * 4.5;
+      const dy = h.cy - HEX_SIZE + 22;
+      ctx.beginPath();
+      ctx.arc(dx, dy, 2.5, 0, Math.PI * 2);
+      if (i < city.level) {
+        ctx.fillStyle = isPlayer ? '#c9a84c' : (isBoss ? '#c05040' : '#a04040');
+      } else {
+        ctx.fillStyle = 'rgba(100,100,100,0.15)';
+      }
+      ctx.fill();
+    }
+
+    // Center icon
+    ctx.font = '15px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    if (isBoss) {
+      ctx.fillStyle = '#c05040';
+      ctx.fillText('☠', h.cx, h.cy + 2);
+    } else if (isPlayer) {
+      ctx.fillStyle = '#4a9fd4';
+      ctx.fillText('⚑', h.cx, h.cy + 2);
+    } else {
+      ctx.fillStyle = '#705050';
+      ctx.fillText('⚐', h.cx, h.cy + 2);
+    }
+
+    // Selectable pulse ring in hex-select mode
+    if (waitingHex && isPlayer && city.level < 4) {
+      drawHexPath(h.cx, h.cy, HEX_SIZE - 4);
+      ctx.strokeStyle = isHov ? 'rgba(92,186,104,0.85)' : 'rgba(58,138,69,0.45)';
+      ctx.lineWidth = 2.5; ctx.stroke();
+    }
+
+    // Boss glow
+    if (isBoss) {
+      ctx.shadowColor = 'rgba(200,60,60,0.4)';
+      ctx.shadowBlur  = isHov ? 20 : 10;
+      drawHexPath(h.cx, h.cy, HEX_SIZE - 2);
+      ctx.strokeStyle = 'transparent'; ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+  });
+
+  // Draw armies
+  hexDefs.forEach(h => {
+    const pA = playerArmies.filter(a => a.hex === h.id);
+    const cA = cpuArmies.filter(a => a.hex === h.id);
+    drawArmies(h, pA, cA);
+  });
+}
+
+function drawArmies(h, pArmies, cArmies) {
+  const all = [
+    ...pArmies.map(a => ({ id: a.id, count: a.units.length, isPlayer: true })),
+    ...cArmies.map(a => ({ id: a.id, count: a.count, isPlayer: false })),
+  ];
+  if (!all.length) return;
+
+  all.forEach((a, idx) => {
+    const n  = all.length;
+    const ox = n === 1 ? 0 : idx === 0 ? -16 : 16;
+    const cx = h.cx + ox;
+    const cy = h.cy;
+    const col  = a.isPlayer ? '#4a9fd4' : '#e74c3c';
+    const glow = a.isPlayer ? 'rgba(74,159,212,0.6)' : 'rgba(231,76,60,0.6)';
+    const icon = a.isPlayer ? '⚔' : '☠';
+
+    // 軍団アイコン（円）
+    ctx.shadowColor = glow;
+    ctx.shadowBlur  = 13;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 15, 0, Math.PI * 2);
+    ctx.fillStyle = a.isPlayer ? 'rgba(12,36,62,0.95)' : 'rgba(55,12,12,0.95)';
+    ctx.fill();
+    ctx.strokeStyle = col;
+    ctx.lineWidth   = 1.8;
+    ctx.stroke();
+    ctx.shadowBlur  = 0;
+
+    ctx.fillStyle = col;
+    ctx.font = '11px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(icon, cx, cy - 1);
+
+    // ユニット数バッジ
+    const bx = cx + 10, by = cy - 10;
+    ctx.beginPath();
+    ctx.arc(bx, by, 8, 0, Math.PI * 2);
+    ctx.fillStyle = a.isPlayer ? 'rgba(46,109,164,0.95)' : 'rgba(140,30,20,0.95)';
+    ctx.fill();
+    ctx.strokeStyle = a.isPlayer ? '#4a9fd4' : '#e74c3c';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 9px Cinzel, serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(a.count, bx, by);
+  });
+}
+
+// ============================================================
+//  MOUSE / KEYBOARD EVENTS
+// ============================================================
+function getHexAt(mx, my) {
+  for (const h of hexDefs) {
+    const dx = mx - h.cx, dy = my - h.cy;
+    if (Math.sqrt(dx*dx + dy*dy) < HEX_SIZE - 4) return h.id;
+  }
+  return null;
+}
+
+canvas.addEventListener('mousemove', e => {
+  const r   = canvas.getBoundingClientRect();
+  const hid = getHexAt(e.clientX - r.left, e.clientY - r.top);
+
+  if (hid !== null) {
+    const city = cities[hid];
+    tooltip.textContent = `HEX ${hid} — ${city.name}`;
+    tooltip.style.left  = (e.clientX + 14) + 'px';
+    tooltip.style.top   = (e.clientY - 28) + 'px';
+    tooltip.classList.add('visible');
+
+    if (waitingHex) {
+      canvas.style.cursor = (city.owner === 'player' && city.level < 4) ? 'pointer' : 'not-allowed';
+    } else {
+      canvas.style.cursor = 'default';
+    }
+  } else {
+    tooltip.classList.remove('visible');
+    canvas.style.cursor = 'default';
+  }
+
+  if (hid !== hoveredHex) {
+    hoveredHex = hid;
+    render();
+    updateCityPanel(hid);
+  }
+});
+
+canvas.addEventListener('mouseleave', () => {
+  tooltip.classList.remove('visible');
+  hoveredHex = null;
+  render();
+  updateCityPanel(null);
+});
+
+canvas.addEventListener('click', e => {
+  const r   = canvas.getBoundingClientRect();
+  const hid = getHexAt(e.clientX - r.left, e.clientY - r.top);
+  if (hid !== null && waitingHex) onHexClickCityDev(hid);
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && waitingHex) cancelHexSelect();
+});
+
+// ============================================================
+//  CITY INFO PANEL
+// ============================================================
+function updateCityPanel(hexId) {
+  const defaultMsg = document.getElementById('cityDefaultMsg');
+  const details    = document.getElementById('cityDetails');
+
+  if (hexId === null) {
+    defaultMsg.style.display = 'flex';
+    details.style.display    = 'none';
+    return;
+  }
+
+  defaultMsg.style.display = 'none';
+  details.style.display    = 'flex';
+
+  const city = cities[hexId];
+  document.getElementById('cityHexName').textContent = `HEX ${hexId} — ${city.name}`;
+
+  const badge = document.getElementById('cityOwnerBadge');
+  if (city.owner === 'player') {
+    badge.textContent = 'プレイヤー領地';
+    badge.className   = 'city-owner-badge player';
+  } else if (city.boss) {
+    badge.textContent = '敵本城（最終目標）';
+    badge.className   = 'city-owner-badge boss';
+  } else {
+    badge.textContent = 'CPU領地';
+    badge.className   = 'city-owner-badge cpu';
+  }
+
+  // Level dots
+  const dotsEl = document.getElementById('cityLevelDots');
+  dotsEl.innerHTML = '';
+  for (let i = 1; i <= 4; i++) {
+    const d = document.createElement('div');
+    d.className = 'level-dot ' + (i <= city.level ? 'filled' : 'empty');
+    dotsEl.appendChild(d);
+  }
+
+  // Facilities
+  const facEl = document.getElementById('facilityList');
+  facEl.innerHTML = city.facilities.length
+    ? city.facilities.map(f => `<div class="info-row">${f}</div>`).join('')
+    : '<div class="info-row" style="font-style:italic;">施設なし</div>';
+
+  // Units
+  const unitEl = document.getElementById('unitList');
+  unitEl.innerHTML = '';
+
+  if (city.owner === 'player') {
+    const armies = playerArmies.filter(a => a.hex === hexId);
+    if (!armies.length) {
+      unitEl.innerHTML = '<div class="info-row" style="font-style:italic;">駐留なし</div>';
+    } else {
+      armies.forEach(a => {
+        const header = document.createElement('div');
+        header.className = 'info-row player-unit';
+        header.style.cssText = 'font-weight:600;margin-top:4px;color:#4a9fd4;';
+        header.textContent = `⚔ 軍団 ${a.id}（${a.units.length}体）`;
+        unitEl.appendChild(header);
+        a.units.forEach(u => {
+          const d = document.createElement('div');
+          d.className = 'info-row player-unit';
+          d.style.paddingLeft = '10px';
+          d.textContent = `${u.name}（${u.position}） HP:${u.hp}/${u.maxHp} 士気:${u.morale}`;
+          unitEl.appendChild(d);
+        });
+      });
+    }
+  } else {
+    const ca = cpuArmies.filter(a => a.hex === hexId);
+    if (!ca.length) {
+      unitEl.innerHTML = '<div class="info-row" style="font-style:italic;">駐留なし</div>';
+    } else {
+      const total = ca.reduce((s, a) => s + a.count, 0);
+      const scale = total <= 2 ? '少数' : total <= 4 ? '中規模' : '大規模';
+      unitEl.innerHTML = `<div class="info-row fog">🌫 ${scale}の敵部隊が駐留中（${total}体・詳細不明）</div>`;
+    }
+  }
+}
+
+// ============================================================
+//  HAND RENDERING
+// ============================================================
+function renderHand() {
+  const area = document.getElementById('handArea');
+  area.innerHTML = '';
+
+  hand.forEach(card => {
+    const isAwait  = waitingHex && card.id === pendingCardId;
+    const isSel    = !waitingHex && selectedCardId === card.id;
+    const playable = canPlay(card);
+
+    const div = document.createElement('div');
+    let cls = 'card';
+    if (isAwait)       cls += ' awaiting-hex';
+    else if (isSel)    cls += ' selected';
+    else if (!playable) cls += ' unplayable';
+    div.className = cls;
+
+    let hint;
+    if (isAwait)    hint = 'カードをクリックでキャンセル';
+    else if (isSel) hint = 'もう一度クリックでプレイ';
+    else            hint = 'クリックで選択';
+
+    div.innerHTML = `
+      <div class="card-cost">${card.cost}</div>
+      <div class="card-name">${card.name}</div>
+      <div class="card-cat-bar ${CAT_CLASS[card.cat]}"></div>
+      <div class="card-desc">${card.desc}</div>
+      <div class="card-hint">${hint}</div>
+    `;
+
+    div.addEventListener('click', () => onCardClick(card.id));
+    area.appendChild(div);
+  });
+
+  // Deck opacity when empty
+  document.getElementById('deckWrap').style.opacity = deck.length ? '1' : '0.25';
+
+  // Discard face top card（innerHTML書き換えでdiscardCountのidが消えるため先に実行）
+  const discardFace = document.getElementById('discardFace');
+  if (discard.length > 0) {
+    const top = discard[discard.length - 1];
+    discardFace.innerHTML = `
+      <div class="pile-top-name">${top.name}</div>
+      <div class="pile-count" id="discardCount">${discard.length}</div>
+    `;
+  } else {
+    discardFace.innerHTML = `
+      <div class="pile-icon">🃟</div>
+      <div class="pile-count" id="discardCount">0</div>
+    `;
+  }
+
+  // Update pile counts（discardFace書き換え後に実行）
+  document.getElementById('deckCount').textContent    = deck.length;
+  document.getElementById('discardCount').textContent = discard.length;
+}
+
+// ============================================================
+//  UI UPDATE
+// ============================================================
+function updateUI() {
+  document.getElementById('goldVal').textContent      = gold;
+  document.getElementById('authorityVal').textContent = authority;
+  document.getElementById('apCur').textContent        = actionPoints;
+  document.getElementById('apMax').textContent        = maxAP;
+  document.getElementById('turnNum').textContent      = `ターン ${turnCount}`;
+}
+
+function flashRes(elId) {
+  const el = document.getElementById(elId);
+  el.classList.remove('flash');
+  void el.offsetWidth; // reflow
+  el.classList.add('flash');
+}
+
+// ============================================================
+//  LOG
+// ============================================================
+function addLog(text, cls) {
+  const area = document.getElementById('logArea');
+  const el   = document.createElement('div');
+  el.className  = 'log-entry ' + (cls || '');
+  el.textContent = text;
+  area.appendChild(el);
+  area.scrollTop = area.scrollHeight;
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+addLog('── ターン 1 開始（初期例外：手札7枚）──', 'system-log');
+addLog('基本カード：2クリックでプレイ', 'system-log');
+addLog('都市整備：クリック後に自軍HEXを選択', 'system-log');
+updateUI();
+renderHand();
+render();
+updateCityPanel(null);
+</script>
+<!-- ===== EVENT OVERLAY (body末尾) ===== -->
+<div id="eventOverlay" style="display:none;position:fixed;inset:0;background:rgba(5,8,14,0.88);z-index:9999;align-items:center;justify-content:center;">
+  <div id="eventModal" style="width:520px;background:#161c28;border:1px solid #7a6030;border-radius:8px;padding:28px 30px 24px;box-shadow:0 0 60px rgba(0,0,0,0.8);">
+    <div id="eventTag" style="font-family:Cinzel,serif;font-size:0.58rem;letter-spacing:0.2em;text-transform:uppercase;margin-bottom:10px;padding:3px 10px;border-radius:3px;display:inline-block;background:rgba(201,168,76,0.12);color:#c9a84c;border:1px solid #7a6030;">イベント</div>
+    <div id="eventTitle" style="font-family:Cinzel,serif;font-size:1.25rem;font-weight:700;color:#d4c4a0;margin-bottom:14px;">—</div>
+    <div id="eventFlavor" style="font-size:0.82rem;color:#6a7a90;line-height:1.75;margin-bottom:14px;font-style:italic;border-left:2px solid #7a6030;padding-left:12px;"></div>
+    <div id="eventSituation" style="font-size:0.84rem;color:#d4c4a0;line-height:1.65;margin-bottom:18px;background:rgba(0,0,0,0.2);border:1px solid rgba(201,168,76,0.1);border-radius:5px;padding:12px 14px;"></div>
+    <div id="eventChoices" style="display:flex;flex-direction:column;gap:9px;"></div>
+    <div id="eventResult" style="display:none;flex-direction:column;gap:12px;">
+      <div id="eventResultText" style="font-size:0.88rem;color:#d4c4a0;line-height:1.7;background:rgba(0,0,0,0.2);border:1px solid rgba(201,168,76,0.1);border-radius:5px;padding:14px 16px;"></div>
+      <div id="eventResultGain" style="font-family:Cinzel,serif;font-size:0.82rem;padding:8px 12px;border-radius:4px;text-align:center;"></div>
+      <button onclick="closeEvent()" style="background:linear-gradient(135deg,#1a3050,#0e1e35);border:1px solid #2e6da4;border-radius:5px;padding:10px;color:#4a9fd4;font-family:Cinzel,serif;font-size:0.72rem;font-weight:700;letter-spacing:0.08em;cursor:pointer;text-align:center;">── 内政フェーズへ戻る ──</button>
+    </div>
+  </div>
+</div>
+<!-- ===== 移動フェーズ オーバーレイ ===== -->
+<div id="movePhaseOverlay" style="display:none;position:fixed;inset:0;background:#0a0d12;z-index:5000;flex-direction:column;align-items:center;">
+
+  <style>
+    #movePhaseOverlay .mp-header {
+      width:100%;text-align:center;padding:14px 20px 10px;
+      border-bottom:1px solid #7a6030;flex-shrink:0;
+    }
+    #movePhaseOverlay .mp-header h2 {
+      font-family:'Cinzel',serif;font-size:1.3rem;font-weight:900;
+      color:#c9a84c;letter-spacing:0.15em;text-shadow:0 0 20px rgba(201,168,76,0.4);
+    }
+    #movePhaseOverlay .mp-header p { font-size:0.8rem;color:#6a7a90;margin-top:3px; }
+    #movePhaseOverlay .mp-layout {
+      display:flex;gap:20px;padding:18px 20px;width:100%;max-width:920px;align-items:flex-start;
+    }
+    #movePhaseOverlay .mp-map-wrap { position:relative;flex-shrink:0; }
+    #movePhaseOverlay #mapCanvas {
+      display:block;border:1px solid #7a6030;border-radius:6px;
+      filter:drop-shadow(0 0 16px rgba(201,168,76,0.06));
+    }
+    #movePhaseOverlay .mp-side { flex:1;display:flex;flex-direction:column;gap:10px;min-width:200px; }
+    #movePhaseOverlay .mp-panel {
+      background:#161c28;border:1px solid #7a6030;border-radius:6px;padding:12px 14px;
+    }
+    #movePhaseOverlay .mp-panel-label {
+      font-family:'Cinzel',serif;font-size:0.58rem;letter-spacing:0.18em;color:#7a6030;
+      text-transform:uppercase;margin-bottom:8px;
+    }
+    #movePhaseOverlay .mp-turn-badge {
+      display:inline-block;font-family:'Cinzel',serif;font-size:0.72rem;letter-spacing:0.1em;
+      padding:3px 10px;border-radius:3px;margin-bottom:4px;
+    }
+    #movePhaseOverlay .mp-turn-badge.player {
+      background:rgba(46,109,164,0.2);border:1px solid #2e6da4;color:#4a9fd4;
+    }
+    #movePhaseOverlay .mp-turn-badge.cpu {
+      background:rgba(231,76,60,0.1);border:1px solid #8a3a2c;color:#e08070;
+    }
+    #movePhaseOverlay .mp-turn-num {
+      font-family:'Cinzel',serif;font-size:0.7rem;color:#7a6030;
+    }
+    #movePhaseOverlay .mp-unit-row {
+      display:flex;align-items:center;gap:8px;padding:4px 0;
+      font-size:0.78rem;color:#6a7a90;border-bottom:1px solid rgba(201,168,76,0.06);
+    }
+    #movePhaseOverlay .mp-unit-row:last-child { border-bottom:none; }
+    #movePhaseOverlay .mp-unit-row.selectable { color:#d4c4a0;cursor:pointer; }
+    #movePhaseOverlay .mp-unit-row.selectable:hover { color:#c9a84c; }
+    #movePhaseOverlay .mp-unit-row.active { color:#c9a84c; }
+    #movePhaseOverlay .mp-unit-row.moved { opacity:0.4; }
+    #movePhaseOverlay .mp-dot {
+      width:8px;height:8px;border-radius:50%;flex-shrink:0;
+    }
+    #movePhaseOverlay .mp-dot.p { background:#4a9fd4;box-shadow:0 0 4px #4a9fd4; }
+    #movePhaseOverlay .mp-dot.c { background:#e74c3c;box-shadow:0 0 4px #e74c3c; }
+    #movePhaseOverlay .mp-moved-badge {
+      font-family:'Cinzel',serif;font-size:0.55rem;letter-spacing:0.08em;
+      background:rgba(100,100,100,0.15);border:1px solid #3a4a60;
+      color:#4a5a70;padding:1px 5px;border-radius:2px;margin-left:auto;
+    }
+    #movePhaseOverlay .mp-log {
+      max-height:100px;overflow-y:auto;font-size:0.74rem;line-height:1.55;color:#6a7a90;
+    }
+    #movePhaseOverlay .mp-log::-webkit-scrollbar { width:3px; }
+    #movePhaseOverlay .mp-log::-webkit-scrollbar-thumb { background:#7a6030;border-radius:2px; }
+    #movePhaseOverlay .mp-log .player-log { color:#4a9fd4; }
+    #movePhaseOverlay .mp-log .cpu-log    { color:#e08070; }
+    #movePhaseOverlay .mp-log .system-log { color:#c9a84c; }
+    #movePhaseOverlay .mp-instr {
+      font-family:'Cinzel',serif;font-size:0.7rem;letter-spacing:0.06em;
+      color:#6a7a90;text-align:center;padding:6px;
+    }
+    #movePhaseOverlay .mp-btn-end {
+      width:100%;padding:10px;
+      background:linear-gradient(135deg,#1a3050,#0e1e35);
+      border:1px solid #2e6da4;border-radius:5px;
+      color:#4a9fd4;font-family:'Cinzel',serif;font-size:0.72rem;
+      font-weight:700;letter-spacing:0.08em;cursor:pointer;transition:all 0.18s;
+    }
+    #movePhaseOverlay .mp-btn-end:hover:not(:disabled) {
+      border-color:#4a9fd4;box-shadow:0 0 14px rgba(74,159,212,0.3);
+    }
+    #movePhaseOverlay .mp-btn-end:disabled { opacity:0.4;cursor:not-allowed; }
+    #movePhaseOverlay .mp-tooltip {
+      position:fixed;background:#161c28;border:1px solid #7a6030;border-radius:4px;
+      padding:4px 10px;font-size:0.76rem;color:#c9a84c;pointer-events:none;
+      opacity:0;transition:opacity 0.15s;z-index:6000;font-family:'Cinzel',serif;
+    }
+    #movePhaseOverlay .mp-tooltip.visible { opacity:1; }
+    #movePhaseOverlay .mp-btn-battle {
+      display:none;position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
+      background:linear-gradient(135deg,#3a0808,#200404);
+      border:1.5px solid #c0392b;border-radius:6px;padding:8px 22px;
+      color:#ff7a6a;font-family:'Cinzel',serif;font-size:0.9rem;font-weight:700;
+      letter-spacing:0.12em;cursor:pointer;z-index:10;
+    }
+  </style>
+
+  <div class="mp-header">
+    <h2>⚔ 移動フェーズ</h2>
+    <p>ユニットを選択してHEXをクリックで移動 / ターンエンドで次ターンへ</p>
+  </div>
+
+  <div class="mp-layout">
+    <div class="mp-map-wrap">
+      <canvas id="mapCanvas" width="480" height="340"></canvas>
+      <button class="mp-btn-battle" id="mpBtnBattle" onclick="mpStartBattle()">⚔ 交戦する</button>
+    </div>
+
+    <div class="mp-side">
+      <div class="mp-panel">
+        <div class="mp-panel-label">フェーズ状況</div>
+        <div class="mp-turn-badge player" id="mpTurnBadge">プレイヤー</div>
+        <div class="mp-turn-num" id="mpTurnNum">ターン 1</div>
+      </div>
+
+      <div class="mp-panel">
+        <div class="mp-panel-label">自軍ユニット</div>
+        <div id="mpPlayerUnitList"></div>
+      </div>
+
+      <div class="mp-panel">
+        <div class="mp-panel-label">敵軍ユニット</div>
+        <div id="mpCpuUnitList"></div>
+      </div>
+
+      <div class="mp-panel">
+        <div class="mp-panel-label">操作ログ</div>
+        <div class="mp-log" id="mpLog"></div>
+      </div>
+
+      <div class="mp-instr" id="mpInstr">ユニットをクリックして選択</div>
+      <button class="mp-btn-end" id="mpBtnEnd" onclick="mpEndTurn()">移動フェーズ ターンエンド</button>
+    </div>
+  </div>
+
+  <div class="mp-tooltip" id="mpTooltip"></div>
+</div>
+
+<script>
+// ============================================================
+//  移動フェーズ システム
+// ============================================================
+const MP_HEX_SIZE = 50;
+const MP_W = 480, MP_H = 340;
+const MP_HR   = Math.sqrt(3) * MP_HEX_SIZE;
+const MP_VR   = 1.5 * MP_HEX_SIZE;
+const MP_HALF = MP_HR / 2;
+const MP_OX   = (MP_W - 3 * MP_HR) / 2;
+const MP_ROW_Y = [80, 80 + MP_VR, 80 + 2 * MP_VR];
+
+const MP_HEX_DEFS = [
+  { id:1,  cx: MP_OX + MP_HALF + 0*MP_HR, cy: MP_ROW_Y[0] },
+  { id:2,  cx: MP_OX + MP_HALF + 1*MP_HR, cy: MP_ROW_Y[0] },
+  { id:3,  cx: MP_OX + MP_HALF + 2*MP_HR, cy: MP_ROW_Y[0] },
+  { id:4,  cx: MP_OX + 0*MP_HR,           cy: MP_ROW_Y[1] },
+  { id:5,  cx: MP_OX + 1*MP_HR,           cy: MP_ROW_Y[1] },
+  { id:6,  cx: MP_OX + 2*MP_HR,           cy: MP_ROW_Y[1] },
+  { id:7,  cx: MP_OX + 3*MP_HR,           cy: MP_ROW_Y[1] },
+  { id:8,  cx: MP_OX + MP_HALF + 0*MP_HR, cy: MP_ROW_Y[2] },
+  { id:9,  cx: MP_OX + MP_HALF + 1*MP_HR, cy: MP_ROW_Y[2] },
+  { id:10, cx: MP_OX + MP_HALF + 2*MP_HR, cy: MP_ROW_Y[2] },
+];
+
+const MP_ADJACENCY = {
+  1:[2,4,5], 2:[1,3,5,6], 3:[2,6,7],
+  4:[1,5,8], 5:[1,2,4,6,8,9], 6:[2,3,5,7,9,10],
+  7:[3,6,10], 8:[4,5,9], 9:[5,6,8,10], 10:[6,7,9],
+};
+
+// 移動フェーズユニット（startMovePhaseで内政フェーズのユニットから生成）
+let mpPlayerUnits = [];
+let mpCpuUnits    = [];
+
+let mpCurrentTurn  = 'player';
+let mpSelectedUnit = null;
+let mpReachable    = [];
+
+// Canvas参照（遅延取得）
+let mpCanvas = null, mpCtx = null, mpTooltipEl = null;
+
+function mpInitCanvas() {
+  if (mpCanvas) return;
+  mpCanvas    = document.getElementById('mapCanvas');
+  mpCtx       = mpCanvas.getContext('2d');
+  mpTooltipEl = document.getElementById('mpTooltip');
+  mpCanvas.addEventListener('mousemove', mpOnMouseMove);
+  mpCanvas.addEventListener('mouseleave', () => mpTooltipEl.classList.remove('visible'));
+  mpCanvas.addEventListener('click', mpOnClick);
+}
+
+// ===== フェーズ入退場 =====
+function startMovePhase() {
+  mpInitCanvas();
+
+  // playerArmiesから移動フェーズ用軍団を生成（1軍団=1移動単位）
+  mpPlayerUnits = playerArmies.map(a => ({
+    id:    a.id,
+    label: `軍団 ${a.id}（${a.units.length}体）`,
+    hex:   a.hex,
+    count: a.units.length,
+    moved: false,
+  }));
+  mpCpuUnits = cpuArmies.map(a => ({
+    id:    a.id,
+    label: `敵軍団 ${a.id}（${a.count}体）`,
+    hex:   a.hex,
+    count: a.count,
+    moved: false,
+  }));
+
+  mpSelectedUnit = null; mpReachable = [];
+  mpCurrentTurn = 'player';
+
+  document.getElementById('movePhaseOverlay').style.display = 'flex';
+  mpAddLog(`── 移動フェーズ（ターン ${turnCount}）開始 ──`, 'system-log');
+  mpUpdateUI();
+  mpRender();
+}
+
+function mpEndMovePhase() {
+  // 収入処理（プロトタイプ：支配HEX数×1金）
+  const playerHexCount = Object.values(cities).filter(c => c.owner === 'player').length;
+  const income = playerHexCount * 1;
+  gold += income;
+  flashRes('goldVal');
+
+  // ターンカウント更新
+  turnCount++;
+  updateUI();
+  addLog(`収入：金 +${income}（自軍HEX ${playerHexCount}箇所）`, 'system-log');
+  addLog(`── ターン ${turnCount} 開始 ──`, 'system-log');
+
+  // 移動フェーズ終了 → イベントフェーズへ
+  document.getElementById('movePhaseOverlay').style.display = 'none';
+  triggerRandomEvent();
+}
+
+// ===== ヘルパー =====
+function mpHexById(id) { return MP_HEX_DEFS.find(h => h.id === id); }
+function mpAllUnits()  { return [...mpPlayerUnits, ...mpCpuUnits]; }
+function mpGetReachable(hexId) { return MP_ADJACENCY[hexId] || []; }
+
+function mpCheckContact(unit) {
+  const enemies = unit.id.startsWith('P')
+    ? mpCpuUnits.filter(c => c.hex === unit.hex)
+    : mpPlayerUnits.filter(p => p.hex === unit.hex);
+  return enemies.length > 0;
+}
+
+function mpShowBattle(visible) {
+  document.getElementById('mpBtnBattle').style.display = visible ? 'block' : 'none';
+}
+
+function mpStartBattle() {
+  mpShowBattle(false);
+  if (window._mpContactPlayerArmyId && window._mpContactCpuArmyId) {
+    triggerBattle(window._mpContactPlayerArmyId, window._mpContactCpuArmyId);
+  }
+}
+
+// ===== 戦闘フェーズ起動 =====
+function triggerBattle(playerArmyId, cpuArmyId) {
+  const playerArmy = playerArmies.find(a => a.id === playerArmyId);
+  const cpuArmy    = cpuArmies.find(a => a.id === cpuArmyId);
+  if (!playerArmy || !cpuArmy) return;
+
+  // 内政フェーズのユニットを戦闘形式に変換
+  const playerBattleUnits = playerArmy.units.map(u => ({
+    id: u.id, name: u.name,
+    faction: 'military',
+    pos: u.position === '前衛' ? 'front' : 'rear',
+    hp: u.maxHp, currentHp: u.hp,
+    atk: u.atk, currentAtk: u.atk,
+    morale: u.morale, currentMorale: u.morale,
+    armor: 0, currentArmor: 0,
+    status: 'active', effects: [], traits: [],
+  }));
+
+  // CPU軍団はcountからユニットを自動生成
+  const CPU_POOL = [
+    { name:'槍兵',     pos:'front', hp:14, atk:3, morale:6, armor:0, traits:[] },
+    { name:'重装歩兵', pos:'front', hp:20, atk:4, morale:6, armor:0, traits:[] },
+    { name:'弓兵',     pos:'rear',  hp:10, atk:4, morale:5, armor:0, traits:['RANGED'] },
+    { name:'盾兵',     pos:'front', hp:22, atk:1, morale:7, armor:2, traits:['TANK'] },
+    { name:'傭兵',     pos:'front', hp:12, atk:4, morale:4, armor:0, traits:['MERCENARY'] },
+    { name:'斥候',     pos:'rear',  hp:8,  atk:3, morale:4, armor:0, traits:[] },
+  ];
+  const enemyBattleUnits = Array.from({ length: cpuArmy.count }, (_, i) => {
+    const t = CPU_POOL[i % CPU_POOL.length];
+    return {
+      id: `e${i+1}`, name: t.name,
+      faction: 'cpu',
+      pos: t.pos,
+      hp: t.hp, currentHp: t.hp,
+      atk: t.atk, currentAtk: t.atk,
+      morale: t.morale, currentMorale: t.morale,
+      armor: t.armor, currentArmor: t.armor,
+      status: 'active', effects: [], traits: t.traits,
+    };
+  });
+
+  window._battlePlayerArmyId = playerArmyId;
+  window._battleCpuArmyId    = cpuArmyId;
+
+  // React描画
+  const overlay = document.getElementById('battlePhaseOverlay');
+  overlay.style.display = 'block';
+  const root = ReactDOM.createRoot(document.getElementById('battleReactRoot'));
+  window._battleRoot = root;
+  root.render(React.createElement(window.BattleProtoComponent, {
+    initialPlayerUnits: playerBattleUnits,
+    initialEnemyUnits:  enemyBattleUnits,
+    onBattleEnd: endBattle,
+  }));
+}
+
+function endBattle(result) {
+  if (window._battleRoot) {
+    window._battleRoot.unmount();
+    window._battleRoot = null;
+  }
+  document.getElementById('battlePhaseOverlay').style.display = 'none';
+
+  const labels = { victory:'勝利', defeat:'敗北', retreat:'撤退', draw:'引き分け' };
+  mpAddLog(`⚔ 戦闘終了：${labels[result] || result}`, result === 'victory' ? 'player-log' : 'system-log');
+
+  // 敗北・撤退時はプレイヤー軍団のユニット数を削減（プロトタイプ：半減）
+  if (result === 'defeat' || result === 'retreat') {
+    const army = playerArmies.find(a => a.id === window._battlePlayerArmyId);
+    if (army) {
+      army.units = army.units.slice(0, Math.max(1, Math.floor(army.units.length / 2)));
+      mpAddLog(`軍団 ${army.id} の戦力が半減（残${army.units.length}体）`, 'system-log');
+    }
+  }
+
+  window._mpContactPlayerArmyId = null;
+  window._mpContactCpuArmyId    = null;
+  mpUpdateUI();
+  mpRender();
+}
+
+// ===== 描画 =====
+function mpDrawHex(cx, cy, size, fill, stroke, sw) {
+  mpCtx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = Math.PI / 180 * (60 * i - 30);
+    mpCtx.lineTo(cx + size * Math.cos(a), cy + size * Math.sin(a));
+  }
+  mpCtx.closePath();
+  mpCtx.fillStyle = fill; mpCtx.fill();
+  mpCtx.strokeStyle = stroke; mpCtx.lineWidth = sw; mpCtx.stroke();
+}
+
+function mpDrawUnits(hDef) {
+  const playerOnHex = mpPlayerUnits.filter(u => u.hex === hDef.id);
+  const cpuOnHex    = mpCpuUnits.filter(u => u.hex === hDef.id);
+  if (!playerOnHex.length && !cpuOnHex.length) return;
+
+  // プレイヤー側：個別ユニットをまとめて1アイコン+バッジ
+  if (playerOnHex.length > 0) {
+    const cx = hDef.cx + (cpuOnHex.length ? -16 : 0);
+    const cy = hDef.cy;
+    const isSelected = mpSelectedUnit && playerOnHex.some(u => u.id === mpSelectedUnit.id);
+    const allMoved   = playerOnHex.every(u => u.moved);
+
+    mpCtx.shadowColor = 'rgba(74,159,212,0.7)';
+    mpCtx.shadowBlur  = isSelected ? 22 : 13;
+    mpCtx.beginPath(); mpCtx.arc(cx, cy, 15, 0, Math.PI * 2);
+    mpCtx.fillStyle = 'rgba(10,30,55,0.95)'; mpCtx.fill();
+    mpCtx.strokeStyle = isSelected ? '#c9a84c' : '#4a9fd4';
+    mpCtx.lineWidth = isSelected ? 2.5 : 1.8; mpCtx.stroke();
+    mpCtx.shadowBlur = 0;
+    if (allMoved) mpCtx.globalAlpha = 0.4;
+    mpCtx.fillStyle = '#4a9fd4'; mpCtx.font = '12px serif';
+    mpCtx.textAlign = 'center'; mpCtx.textBaseline = 'middle';
+    mpCtx.fillText('⚔', cx, cy - 1);
+    mpCtx.globalAlpha = 1;
+
+    // バッジ：軍団のユニット総数
+    const bx = cx + 11, by = cy - 11;
+    mpCtx.beginPath(); mpCtx.arc(bx, by, 9, 0, Math.PI * 2);
+    mpCtx.fillStyle = 'rgba(46,109,164,0.95)'; mpCtx.fill();
+    mpCtx.strokeStyle = '#4a9fd4'; mpCtx.lineWidth = 1; mpCtx.stroke();
+    mpCtx.fillStyle = '#fff'; mpCtx.font = 'bold 9px Cinzel, serif';
+    mpCtx.textAlign = 'center'; mpCtx.textBaseline = 'middle';
+    mpCtx.fillText(playerOnHex.length > 0 ? playerOnHex[0].count : '', bx, by);
+  }
+
+  // CPU側：軍団アイコン+バッジ
+  cpuOnHex.forEach((a, idx) => {
+    const cx = hDef.cx + (playerOnHex.length ? 16 : 0);
+    const cy = hDef.cy;
+    mpCtx.shadowColor = 'rgba(231,76,60,0.7)'; mpCtx.shadowBlur = 13;
+    mpCtx.beginPath(); mpCtx.arc(cx, cy, 15, 0, Math.PI * 2);
+    mpCtx.fillStyle = 'rgba(50,10,10,0.95)'; mpCtx.fill();
+    mpCtx.strokeStyle = '#e74c3c'; mpCtx.lineWidth = 1.8; mpCtx.stroke();
+    mpCtx.shadowBlur = 0;
+    mpCtx.fillStyle = '#e74c3c'; mpCtx.font = '12px serif';
+    mpCtx.textAlign = 'center'; mpCtx.textBaseline = 'middle';
+    mpCtx.fillText('☠', cx, cy - 1);
+
+    const bx = cx + 11, by = cy - 11;
+    mpCtx.beginPath(); mpCtx.arc(bx, by, 9, 0, Math.PI * 2);
+    mpCtx.fillStyle = 'rgba(140,30,20,0.95)'; mpCtx.fill();
+    mpCtx.strokeStyle = '#e74c3c'; mpCtx.lineWidth = 1; mpCtx.stroke();
+    mpCtx.fillStyle = '#fff'; mpCtx.font = 'bold 9px Cinzel, serif';
+    mpCtx.textAlign = 'center'; mpCtx.textBaseline = 'middle';
+    mpCtx.fillText(a.count, bx, by);
+  });
+}
+
+function mpRender() {
+  if (!mpCtx) return;
+  mpCtx.clearRect(0, 0, MP_W, MP_H);
+  const bg = mpCtx.createRadialGradient(MP_W/2, MP_H/2, 50, MP_W/2, MP_H/2, 280);
+  bg.addColorStop(0, '#131926'); bg.addColorStop(1, '#0a0d12');
+  mpCtx.fillStyle = bg; mpCtx.fillRect(0, 0, MP_W, MP_H);
+
+  MP_HEX_DEFS.forEach(h => {
+    const isReachable   = mpReachable.includes(h.id);
+    const isSelectedHex = mpSelectedUnit && mpSelectedUnit.hex === h.id;
+    // 都市オーナーに応じた色付け
+    const cityOwner = cities[h.id] ? cities[h.id].owner : null;
+    let fill = '#1a2235', stroke = '#2a3a55', sw = 1.5;
+    if (cityOwner === 'player') { fill = '#0e1e35'; stroke = '#2e6da4'; }
+    if (isReachable)   { fill = '#1a3020'; stroke = '#4a9a55'; sw = 2; }
+    if (isSelectedHex) { fill = '#3a3010'; stroke = '#c9a84c'; sw = 2.5; }
+    mpDrawHex(h.cx, h.cy, MP_HEX_SIZE - 3, fill, stroke, sw);
+
+    // HEX番号 + 都市名
+    mpCtx.fillStyle = '#3a4a65'; mpCtx.font = '500 10px Cinzel, serif';
+    mpCtx.textAlign = 'center'; mpCtx.textBaseline = 'top';
+    mpCtx.fillText(h.id, h.cx, h.cy - MP_HEX_SIZE + 8);
+    if (cities[h.id]) {
+      mpCtx.fillStyle = cityOwner === 'player' ? 'rgba(74,159,212,0.6)' : 'rgba(231,76,60,0.3)';
+      mpCtx.font = '10px Crimson Text, serif';
+      mpCtx.textBaseline = 'bottom';
+      mpCtx.fillText(cities[h.id].name, h.cx, h.cy + MP_HEX_SIZE - 8);
+    }
+
+    // 移動候補リング
+    if (isReachable) {
+      mpCtx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = Math.PI / 180 * (60 * i - 30);
+        const px = h.cx + (MP_HEX_SIZE - 4) * Math.cos(a);
+        const py = h.cy + (MP_HEX_SIZE - 4) * Math.sin(a);
+        i === 0 ? mpCtx.moveTo(px, py) : mpCtx.lineTo(px, py);
+      }
+      mpCtx.closePath();
+      mpCtx.strokeStyle = 'rgba(74,200,100,0.4)'; mpCtx.lineWidth = 3; mpCtx.stroke();
+    }
+  });
+
+  MP_HEX_DEFS.forEach(h => mpDrawUnits(h));
+}
+
+// ===== インタラクション =====
+function mpGetHexAt(mx, my) {
+  for (const h of MP_HEX_DEFS) {
+    if (Math.sqrt((mx-h.cx)**2 + (my-h.cy)**2) < MP_HEX_SIZE - 4) return h.id;
+  }
+  return null;
+}
+
+function mpGetMovableAt(hexId) {
+  return mpPlayerUnits.find(u => u.hex === hexId && !u.moved);
+}
+
+function mpOnMouseMove(e) {
+  const r = mpCanvas.getBoundingClientRect();
+  const hid = mpGetHexAt(e.clientX - r.left, e.clientY - r.top);
+  if (hid !== null) {
+    const occ = mpAllUnits().filter(u => u.hex === hid).map(u => u.label).join(', ');
+    mpTooltipEl.textContent = `HEX ${hid}  ${cities[hid] ? cities[hid].name : ''}${occ ? '  ' + occ : ''}`;
+    mpTooltipEl.style.left = (e.clientX + 14) + 'px';
+    mpTooltipEl.style.top  = (e.clientY - 28) + 'px';
+    mpTooltipEl.classList.add('visible');
+    mpCanvas.style.cursor = (mpCurrentTurn === 'player' && (mpGetMovableAt(hid) || (mpSelectedUnit && mpReachable.includes(hid)))) ? 'pointer' : 'default';
+  } else {
+    mpTooltipEl.classList.remove('visible');
+    mpCanvas.style.cursor = 'default';
+  }
+}
+
+function mpOnClick(e) {
+  if (mpCurrentTurn !== 'player') return;
+  const r = mpCanvas.getBoundingClientRect();
+  const hid = mpGetHexAt(e.clientX - r.left, e.clientY - r.top);
+  if (hid === null) return;
+
+  // 自軍軍団を選択
+  const army = mpPlayerUnits.find(u => u.hex === hid && !u.moved);
+  if (army) {
+    if (mpSelectedUnit && mpSelectedUnit.id === army.id) {
+      mpSelectedUnit = null; mpReachable = [];
+    } else {
+      mpSelectedUnit = army;
+      mpReachable    = mpGetReachable(hid);
+      mpAddLog(`${army.label} を選択 (HEX ${hid})`, 'player-log');
+    }
+    mpUpdateUI(); mpRender();
+    return;
+  }
+
+  // 移動先選択
+  if (mpSelectedUnit && mpReachable.includes(hid)) {
+    const from = mpSelectedUnit.hex;
+    mpSelectedUnit.hex   = hid;
+    mpSelectedUnit.moved = true;
+    mpReachable = [];
+    const contact = mpCheckContact(mpSelectedUnit);
+    mpAddLog(`${mpSelectedUnit.label}  HEX ${from} → HEX ${hid}` + (contact ? '  ⚔ 敵軍と接触！' : ''), 'player-log');
+    if (contact) {
+      const enemyOnHex = mpCpuUnits.find(u => u.hex === hid);
+      window._mpContactPlayerArmyId = mpSelectedUnit.id;
+      window._mpContactCpuArmyId    = enemyOnHex ? enemyOnHex.id : null;
+      mpShowBattle(true);
+    }
+    mpSelectedUnit = null;
+
+    if (mpPlayerUnits.every(u => u.moved)) {
+      mpAddLog('自軍 全ユニット移動完了', 'system-log');
+      mpUpdateUI(); mpRender();
+      setTimeout(() => mpEndTurn(true), 500);
+    } else {
+      mpUpdateUI(); mpRender();
+    }
+    return;
+  }
+
+  // 選択解除
+  if (mpSelectedUnit) { mpSelectedUnit = null; mpReachable = []; mpUpdateUI(); mpRender(); }
+}
+
+// ===== ターン管理 =====
+function mpEndTurn(auto = false) {
+  if (mpCurrentTurn !== 'player') return;
+  if (!auto) {
+    const unmoved = mpPlayerUnits.filter(u => !u.moved);
+    if (unmoved.length > 0)
+      mpAddLog(`（${unmoved.map(u => u.label).join('・')} 未移動のままターン終了）`, 'system-log');
+  }
+  mpSelectedUnit = null; mpReachable = [];
+  mpShowBattle(false);
+
+  // 移動結果をplayerArmiesに反映
+  mpPlayerUnits.forEach(mp => {
+    const a = playerArmies.find(a => a.id === mp.id);
+    if (a) a.hex = mp.hex;
+  });
+
+  mpAddLog('移動フェーズ終了', 'system-log');
+  mpEndMovePhase();
+}
+
+// ===== UI更新 =====
+function mpUpdateUI() {
+  const badge = document.getElementById('mpTurnBadge');
+  const instr = document.getElementById('mpInstr');
+  const btn   = document.getElementById('mpBtnEnd');
+  document.getElementById('mpTurnNum').textContent = `ターン ${turnCount}`;
+
+  if (mpCurrentTurn === 'player') {
+    badge.textContent = 'プレイヤーターン'; badge.className = 'mp-turn-badge player';
+    btn.disabled = false;
+    const rem = mpPlayerUnits.filter(u => !u.moved).length;
+    instr.textContent = mpSelectedUnit
+      ? `${mpSelectedUnit.label} — 移動先HEXをクリック`
+      : rem > 0 ? `未移動 ${rem} 体 — ユニットをクリックして選択` : 'ターンエンドを押してください';
+  }
+  mpUpdateUnitList();
+}
+
+function mpUpdateUnitList() {
+  const pl = document.getElementById('mpPlayerUnitList');
+  pl.innerHTML = '';
+  mpPlayerUnits.forEach(u => {
+    const isActive = mpSelectedUnit && mpSelectedUnit.id === u.id;
+    const row = document.createElement('div');
+    row.className = 'mp-unit-row' + (u.moved ? ' moved' : (mpCurrentTurn === 'player' ? ' selectable' : '')) + (isActive ? ' active' : '');
+    row.innerHTML = `<div class="mp-dot p"></div><span style="flex:1;">${u.label}</span><span style="font-size:0.7rem;color:#4a5a70;">HEX ${u.hex}</span>${u.moved ? '<span class="mp-moved-badge">移動済</span>' : ''}`;
+    if (!u.moved && mpCurrentTurn === 'player') {
+      row.addEventListener('click', () => {
+        if (mpSelectedUnit && mpSelectedUnit.id === u.id) { mpSelectedUnit = null; mpReachable = []; }
+        else { mpSelectedUnit = u; mpReachable = mpGetReachable(u.hex); mpAddLog(`${u.label} を選択 (HEX ${u.hex})`, 'player-log'); }
+        mpUpdateUI(); mpRender();
+      });
+    }
+    pl.appendChild(row);
+  });
+
+  const cl = document.getElementById('mpCpuUnitList');
+  cl.innerHTML = '';
+  mpCpuUnits.forEach(u => {
+    const row = document.createElement('div');
+    row.className = 'mp-unit-row' + (u.moved ? ' moved' : '');
+    row.innerHTML = `<div class="mp-dot c"></div><span style="flex:1;">${u.label}</span><span style="font-size:0.7rem;color:#4a5a70;">HEX ${u.hex}</span>${u.moved ? '<span class="mp-moved-badge">移動済</span>' : ''}`;
+    cl.appendChild(row);
+  });
+}
+
+function mpAddLog(text, cls) {
+  const area = document.getElementById('mpLog');
+  const el   = document.createElement('div');
+  el.className  = cls || '';
+  el.textContent = text;
+  area.appendChild(el);
+  area.scrollTop = area.scrollHeight;
+}
+</script>
+
+<!-- ===== 戦闘フェーズ オーバーレイ ===== -->
+<div id="battlePhaseOverlay" style="display:none;position:fixed;inset:0;z-index:7000;background:#0d0b08;overflow-y:auto;">
+  <div id="battleReactRoot"></div>
+</div>
+
+<script type="text/babel">
+// React is loaded via CDN
+const { useState, useEffect, useCallback, useRef } = React;
+
+// ── THEME ───────────────────────────────────────────────────────
+const C = {
+  bg:          "#0d0b08",
+  panel:       "#141108",
+  panelLight:  "#1c1810",
+  border:      "#2a2416",
+  borderLight: "#3d3422",
+  gold:        "#c8a84a",
+  goldDim:     "#7a6428",
+  text:        "#d8c89a",
+  textDim:     "#7a6e56",
+  textMuted:   "#4a4234",
+  red:         "#cc4422",
+  redDim:      "#7a2810",
+  green:       "#4a8840",
+  greenDim:    "#28501a",
+  blue:        "#3a6ea8",
+  blueDim:     "#1a3a5a",
+  warn:        "#c87a20",
+  warnDim:     "#6a3c08",
+  morale:      "#6ab0d8",
+  hp:          "#e06040",
+  ap:          "#a0c060",
+};
+
+// ── UNIT TEMPLATES ───────────────────────────────────────────────
+const UNIT_TEMPLATES = {
+  // 軍人
+  spearman:  { name: "槍兵",   faction:"military", pos:"front", hp:14, atk:3, morale:6, armor:0, traits:[] },
+  shieldman: { name: "盾兵",   faction:"military", pos:"front", hp:22, atk:1, morale:7, armor:2, traits:["TANK"] },
+  heavy:     { name: "重装",   faction:"military", pos:"front", hp:20, atk:4, morale:6, armor:0, traits:[] },
+  archer:    { name: "弓兵",   faction:"military", pos:"rear",  hp:10, atk:4, morale:5, armor:0, traits:["RANGED"] },
+  commander: { name: "司令官", faction:"military", pos:"rear",  hp:12, atk:2, morale:9, armor:0, traits:["COMMANDER"] },
+  // 商人
+  sellsword: { name: "傭兵剣士", faction:"merchant", pos:"front", hp:12, atk:4, morale:4, armor:0, traits:["MERCENARY"] },
+  bodyguard: { name: "用心棒",   faction:"merchant", pos:"front", hp:18, atk:3, morale:5, armor:1, traits:["MERCENARY"] },
+  smuggler:  { name: "密輸業者", faction:"merchant", pos:"rear",  hp:8,  atk:5, morale:4, armor:0, traits:["MERCENARY","RANGED"] },
+  trader:    { name: "交易商",   faction:"merchant", pos:"rear",  hp:6,  atk:0, morale:7, armor:0, traits:["SUPPORT"] },
+};
+
+// ── CARD DEFINITIONS ─────────────────────────────────────────────
+const CARDS = {
+  // === 軍人カード ===
+  charge:      { id:"charge",      name:"突撃命令",   cost:2, faction:"military", type:"buff",   desc:"味方前衛全体のATK×2（このターン）",         effect:"atk_front_double" },
+  inspire:     { id:"inspire",     name:"鼓舞の旗",   cost:1, faction:"military", type:"buff",   desc:"味方1体のATK+3・士気+2",                    effect:"buff_one" },
+  warGod:      { id:"warGod",      name:"軍神の加護", cost:3, faction:"military", type:"buff",   desc:"全味方ATK+2・アーマー付与（このターン）",    effect:"atk_all_armor" },
+  vanguard:    { id:"vanguard",    name:"先陣の誉れ", cost:1, faction:"military", type:"buff",   desc:"前衛1体が2回攻撃",                           effect:"double_strike" },
+  rally:       { id:"rally",       name:"戦意高揚",   cost:2, faction:"military", type:"buff",   desc:"全味方士気+4・次ターンATK+1",                effect:"morale_all" },
+  shield_wall: { id:"shield_wall", name:"盾の壁",     cost:1, faction:"military", type:"defend", desc:"味方前衛全体にアーマー付与",                  effect:"armor_front" },
+  iron_wall:   { id:"iron_wall",   name:"鉄壁陣形",   cost:2, faction:"military", type:"defend", desc:"このターン全味方ダメージ半減",                effect:"half_dmg" },
+  panic:       { id:"panic",       name:"恐慌の怒号", cost:2, faction:"military", type:"attack", desc:"敵前衛全体に恐慌（ATK半減・1ターン）",        effect:"panic_front" },
+  focus_fire:  { id:"focus_fire",  name:"集中砲火",   cost:2, faction:"military", type:"attack", desc:"敵1体にダメージ×3（アーマー貫通）",           effect:"focus_3x" },
+  surround:    { id:"surround",    name:"包囲陣形",   cost:3, faction:"military", type:"attack", desc:"敵全体にダメージ・後衛攻撃可（1ターン）",     effect:"surround" },
+  // === 商人カード ===
+  rumor:       { id:"rumor",       name:"流言飛語",   cost:2, faction:"merchant", type:"morale", desc:"敵全体の士気-2（傭兵は-4）",                 effect:"morale_enemy_all" },
+  bribe:       { id:"bribe",       name:"買収工作",   cost:2, faction:"merchant", type:"morale", desc:"敵傭兵1体を離脱させる（士気0扱い）",          effect:"bribe_mercenary" },
+  poison_sup:  { id:"poison_sup",  name:"兵站妨害",   cost:2, faction:"merchant", type:"debuff", desc:"敵全体のATK-2（補給線切断）",                 effect:"atk_enemy_down" },
+  gold_rush:   { id:"gold_rush",   name:"金貨ばらまき",cost:1,faction:"merchant", type:"morale", desc:"敵1体の士気-3",                              effect:"morale_enemy_one" },
+  double_pay:  { id:"double_pay",  name:"二重賃金",   cost:2, faction:"merchant", type:"buff",   desc:"味方傭兵全体のATK+2・士気+3",                effect:"buff_mercenary" },
+};
+
+// ── PRESET ARMIES ────────────────────────────────────────────────
+function makeUnit(templateKey, id) {
+  const t = UNIT_TEMPLATES[templateKey];
+  return {
+    ...t,
+    id,
+    currentHp: t.hp,
+    currentMorale: t.morale,
+    currentAtk: t.atk,
+    currentArmor: t.armor,
+    status: "active", // active | routed | dead
+    effects: [], // 一時的なバフ/デバフ
+  };
+}
+
+const PRESET_PLAYER = [
+  makeUnit("spearman",  "p1"),
+  makeUnit("shieldman", "p2"),
+  makeUnit("heavy",     "p3"),
+  makeUnit("archer",    "p4"),
+  makeUnit("commander", "p5"),
+];
+
+const PRESET_ENEMY = [
+  makeUnit("sellsword", "e1"),
+  makeUnit("bodyguard", "e2"),
+  makeUnit("bodyguard", "e3"),
+  makeUnit("smuggler",  "e4"),
+  makeUnit("trader",    "e5"),
+];
+
+const PLAYER_DECK = [
+  "charge","inspire","warGod","vanguard","rally",
+  "shield_wall","iron_wall","panic","focus_fire","surround",
+  "charge","inspire","rally","shield_wall","panic",
+];
+
+// ── GAME LOGIC ───────────────────────────────────────────────────
+const MORALE_THRESHOLD = 3; // 閾値：これ以下で連鎖崩壊リスク
+
+function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+function isAlive(u) { return u.status === "active"; }
+
+function getFront(units) {
+  return units.filter(u => isAlive(u) && u.pos === "front");
+}
+function getRear(units) {
+  return units.filter(u => isAlive(u) && u.pos === "rear");
+}
+function getActive(units) {
+  return units.filter(u => isAlive(u));
+}
+
+function checkMoraleCollapse(unit, allUnits, log) {
+  if (unit.status !== "active") return unit;
+  if (unit.currentMorale <= 0) {
+    log.push({ text: `【士気崩壊】${unit.name} が離脱！`, type: "morale" });
+    return { ...unit, status: "routed" };
+  }
+  // 閾値付近で連鎖リスク
+  if (unit.currentMorale <= MORALE_THRESHOLD) {
+    // 50%の確率で連鎖崩壊
+    if (Math.random() < 0.4) {
+      log.push({ text: `【連鎖崩壊】${unit.name} が閾値を下回り離脱！（士気${unit.currentMorale}）`, type: "morale" });
+      return { ...unit, status: "routed" };
+    }
+  }
+  return unit;
+}
+
+function applyMoraleDamage(unit, amount, log) {
+  const newMorale = clamp(unit.currentMorale - amount, 0, 99);
+  log.push({ text: `${unit.name} 士気-${amount}（→${newMorale}）`, type: "morale" });
+  return { ...unit, currentMorale: newMorale };
+}
+
+function autoAttackPhase(attackers, defenders, log) {
+  let defClone = defenders.map(u => ({ ...u }));
+  let atkClone = attackers.map(u => ({ ...u }));
+
+  // 攻撃側→防衛側
+  const attackFront = getFront(atkClone);
+  let targetIdx = 0;
+  const defFront = defClone.filter(u => isAlive(u) && u.pos === "front");
+
+  attackFront.forEach(atk => {
+    if (targetIdx >= defFront.length) return;
+    const tgt = defFront[targetIdx];
+    const tgtGlobalIdx = defClone.findIndex(u => u.id === tgt.id);
+    const dmg = Math.max(0, atk.currentAtk - defClone[tgtGlobalIdx].currentArmor);
+    defClone[tgtGlobalIdx] = {
+      ...defClone[tgtGlobalIdx],
+      currentHp: defClone[tgtGlobalIdx].currentHp - dmg,
+    };
+    log.push({ text: `${atk.name} → ${tgt.name}（物理${dmg}ダメ）`, type: "attack" });
+
+    // HP死亡
+    if (defClone[tgtGlobalIdx].currentHp <= 0) {
+      log.push({ text: `【戦死】${tgt.name} が永久消滅！`, type: "death" });
+      defClone[tgtGlobalIdx] = { ...defClone[tgtGlobalIdx], status: "dead" };
+      // 仲間の士気ダメ
+      defClone = defClone.map(u => {
+        if (u.id === tgt.id || !isAlive(u)) return u;
+        return applyMoraleDamage(u, 2, log);
+      });
+      targetIdx++;
+    }
+    // 士気1固定ダメ（被攻撃）
+    if (defClone[tgtGlobalIdx].status === "active") {
+      defClone[tgtGlobalIdx] = applyMoraleDamage(defClone[tgtGlobalIdx], 1, log);
+    }
+  });
+
+  // 後衛からも攻撃（RANGED）
+  const atkRear = getRear(atkClone).filter(u => u.traits.includes("RANGED"));
+  atkRear.forEach(atk => {
+    const defActive = getActive(defClone);
+    if (defActive.length === 0) return;
+    const tgt = defActive[Math.floor(Math.random() * defActive.length)];
+    const tgtGlobalIdx = defClone.findIndex(u => u.id === tgt.id);
+    const dmg = Math.max(0, atk.currentAtk - defClone[tgtGlobalIdx].currentArmor);
+    defClone[tgtGlobalIdx] = {
+      ...defClone[tgtGlobalIdx],
+      currentHp: defClone[tgtGlobalIdx].currentHp - dmg,
+    };
+    log.push({ text: `${atk.name}（遠射）→ ${tgt.name}（${dmg}ダメ）`, type: "attack" });
+    if (defClone[tgtGlobalIdx].currentHp <= 0) {
+      log.push({ text: `【戦死】${tgt.name} が永久消滅！`, type: "death" });
+      defClone[tgtGlobalIdx] = { ...defClone[tgtGlobalIdx], status: "dead" };
+      defClone = defClone.map(u => {
+        if (u.id === tgt.id || !isAlive(u)) return u;
+        return applyMoraleDamage(u, 2, log);
+      });
+    }
+  });
+
+  // 司令官の士気回復
+  const hasCommander = atkClone.some(u => isAlive(u) && u.traits.includes("COMMANDER"));
+  if (hasCommander) {
+    atkClone = atkClone.map(u => {
+      if (!isAlive(u)) return u;
+      const recovered = clamp(u.currentMorale + 2, 0, u.morale);
+      if (recovered > u.currentMorale) log.push({ text: `司令官：${u.name} 士気回復+2`, type: "buff" });
+      return { ...u, currentMorale: recovered };
+    });
+  }
+
+  // 士気崩壊チェック
+  defClone = defClone.map(u => checkMoraleCollapse(u, defClone, log));
+  atkClone = atkClone.map(u => checkMoraleCollapse(u, atkClone, log));
+
+  return { newAttackers: atkClone, newDefenders: defClone };
+}
+
+function applyCard(cardId, playerUnits, enemyUnits, targetId, log) {
+  const card = CARDS[cardId];
+  if (!card) return { playerUnits, enemyUnits };
+
+  let pU = playerUnits.map(u => ({ ...u }));
+  let eU = enemyUnits.map(u => ({ ...u }));
+
+  switch (card.effect) {
+    case "atk_front_double":
+      pU = pU.map(u => u.pos === "front" && isAlive(u) ? { ...u, currentAtk: u.currentAtk * 2 } : u);
+      log.push({ text: "突撃命令！前衛ATK×2", type: "buff" });
+      break;
+    case "buff_one": {
+      const tIdx = pU.findIndex(u => u.id === targetId);
+      if (tIdx >= 0) {
+        pU[tIdx] = { ...pU[tIdx], currentAtk: pU[tIdx].currentAtk + 3, currentMorale: clamp(pU[tIdx].currentMorale + 2, 0, pU[tIdx].morale) };
+        log.push({ text: `${pU[tIdx].name} ATK+3・士気+2`, type: "buff" });
+      }
+      break;
+    }
+    case "atk_all_armor":
+      pU = pU.map(u => isAlive(u) ? { ...u, currentAtk: u.currentAtk + 2, currentArmor: u.currentArmor + 1 } : u);
+      log.push({ text: "軍神の加護！全味方ATK+2・アーマー+1", type: "buff" });
+      break;
+    case "double_strike": {
+      const front = pU.find(u => u.pos === "front" && isAlive(u));
+      if (front) {
+        const tgt = getFront(eU)[0];
+        if (tgt) {
+          const tIdx = eU.findIndex(u => u.id === tgt.id);
+          const dmg = Math.max(0, front.currentAtk - eU[tIdx].currentArmor);
+          eU[tIdx] = { ...eU[tIdx], currentHp: eU[tIdx].currentHp - dmg };
+          log.push({ text: `${front.name} 二連撃！ ${tgt.name}に追加${dmg}ダメ`, type: "attack" });
+          if (eU[tIdx].currentHp <= 0) {
+            eU[tIdx] = { ...eU[tIdx], status: "dead" };
+            log.push({ text: `【戦死】${tgt.name} 消滅`, type: "death" });
+          }
+        }
+      }
+      break;
+    }
+    case "morale_all":
+      pU = pU.map(u => isAlive(u) ? { ...u, currentMorale: clamp(u.currentMorale + 4, 0, u.morale) } : u);
+      log.push({ text: "戦意高揚！全味方士気+4", type: "buff" });
+      break;
+    case "armor_front":
+      pU = pU.map(u => u.pos === "front" && isAlive(u) ? { ...u, currentArmor: u.currentArmor + 2 } : u);
+      log.push({ text: "盾の壁！前衛アーマー+2", type: "buff" });
+      break;
+    case "half_dmg":
+      pU = pU.map(u => isAlive(u) ? { ...u, halfDmg: true } : u);
+      log.push({ text: "鉄壁陣形！このターンダメージ半減", type: "buff" });
+      break;
+    case "panic_front":
+      eU = eU.map(u => u.pos === "front" && isAlive(u) ? { ...u, currentAtk: Math.floor(u.currentAtk / 2) } : u);
+      log.push({ text: "恐慌の怒号！敵前衛ATK半減", type: "attack" });
+      break;
+    case "focus_3x": {
+      const etIdx = eU.findIndex(u => u.id === targetId && isAlive(u));
+      if (etIdx >= 0) {
+        const src = getFront(pU)[0] || getActive(pU)[0];
+        if (src) {
+          const dmg = src.currentAtk * 3;
+          eU[etIdx] = { ...eU[etIdx], currentHp: eU[etIdx].currentHp - dmg };
+          log.push({ text: `集中砲火！${eU[etIdx].name}に${dmg}ダメ（アーマー貫通）`, type: "attack" });
+          if (eU[etIdx].currentHp <= 0) {
+            eU[etIdx] = { ...eU[etIdx], status: "dead" };
+            log.push({ text: `【戦死】${eU[etIdx].name} 消滅`, type: "death" });
+            eU = eU.map(u => u.id !== eU[etIdx].id && isAlive(u) ? applyMoraleDamage(u, 2, log) : u);
+          }
+        }
+      }
+      break;
+    }
+    case "surround":
+      eU = eU.map(u => {
+        if (!isAlive(u)) return u;
+        const src = getActive(pU)[0];
+        const dmg = src ? Math.max(0, src.currentAtk - u.currentArmor) : 2;
+        log.push({ text: `包囲！${u.name}に${dmg}ダメ`, type: "attack" });
+        const updated = { ...u, currentHp: u.currentHp - dmg };
+        if (updated.currentHp <= 0) {
+          log.push({ text: `【戦死】${u.name} 消滅`, type: "death" });
+          return { ...updated, status: "dead" };
+        }
+        return updated;
+      });
+      break;
+    case "morale_enemy_all":
+      eU = eU.map(u => {
+        if (!isAlive(u)) return u;
+        const amount = u.traits.includes("MERCENARY") ? 4 : 2;
+        return applyMoraleDamage(u, amount, log);
+      });
+      log.push({ text: "流言飛語！敵全体士気-2（傭兵-4）", type: "morale" });
+      break;
+    case "bribe_mercenary": {
+      const mercs = eU.filter(u => isAlive(u) && u.traits.includes("MERCENARY"));
+      if (mercs.length > 0) {
+        const tgt = mercs[Math.floor(Math.random() * mercs.length)];
+        const tIdx = eU.findIndex(u => u.id === tgt.id);
+        eU[tIdx] = { ...eU[tIdx], currentMorale: 0, status: "routed" };
+        log.push({ text: `買収工作！${tgt.name} が離脱！`, type: "morale" });
+      } else {
+        log.push({ text: "買収対象の傭兵がいない", type: "warn" });
+      }
+      break;
+    }
+    case "atk_enemy_down":
+      eU = eU.map(u => isAlive(u) ? { ...u, currentAtk: Math.max(0, u.currentAtk - 2) } : u);
+      log.push({ text: "兵站妨害！敵全体ATK-2", type: "morale" });
+      break;
+    case "morale_enemy_one": {
+      const etIdx2 = eU.findIndex(u => u.id === targetId && isAlive(u));
+      if (etIdx2 >= 0) {
+        eU[etIdx2] = applyMoraleDamage(eU[etIdx2], 3, log);
+        log.push({ text: `金貨ばらまき！${eU[etIdx2].name} 士気-3`, type: "morale" });
+      }
+      break;
+    }
+    case "buff_mercenary":
+      pU = pU.map(u => isAlive(u) && u.traits.includes("MERCENARY")
+        ? { ...u, currentAtk: u.currentAtk + 2, currentMorale: clamp(u.currentMorale + 3, 0, u.morale) } : u);
+      log.push({ text: "二重賃金！傭兵ATK+2・士気+3", type: "buff" });
+      break;
+    default:
+      break;
+  }
+
+  // 士気崩壊チェック
+  eU = eU.map(u => checkMoraleCollapse(u, eU, log));
+  pU = pU.map(u => checkMoraleCollapse(u, pU, log));
+
+  return { playerUnits: pU, enemyUnits: eU };
+}
+
+// CPU AI（Slay the Spire方式：事前予告）
+function planCpuAction(enemyUnits, playerUnits, round) {
+  const active = getActive(enemyUnits);
+  if (active.length === 0) return { type: "none", desc: "（行動不能）" };
+  // ラウンドごとに行動パターンを固定
+  const patterns = ["attack", "attack", "morale", "attack", "defend"];
+  const pattern = patterns[round % patterns.length];
+  if (pattern === "defend") return { type: "defend", desc: "陣形強化中…（防御準備）" };
+  if (pattern === "morale") return { type: "morale", desc: "士気を鼓舞中…（士気+3）" };
+  const front = getFront(playerUnits);
+  const target = front[0] || getActive(playerUnits)[0];
+  const attacker = getFront(enemyUnits)[0] || getActive(enemyUnits)[0];
+  const dmg = attacker ? Math.max(0, attacker.currentAtk - (target?.currentArmor || 0)) : 0;
+  return {
+    type: "attack",
+    desc: `${attacker?.name || "敵"} → ${target?.name || "自軍"} に攻撃（推定${dmg}ダメ）`,
+  };
+}
+
+function executeCpuAction(action, enemyUnits, playerUnits, log) {
+  let pU = playerUnits.map(u => ({ ...u }));
+  let eU = enemyUnits.map(u => ({ ...u }));
+
+  if (action.type === "defend") {
+    eU = eU.map(u => isAlive(u) ? { ...u, currentArmor: u.currentArmor + 1 } : u);
+    log.push({ text: "敵：陣形強化（アーマー+1）", type: "cpu" });
+  } else if (action.type === "morale") {
+    eU = eU.map(u => isAlive(u) ? { ...u, currentMorale: clamp(u.currentMorale + 3, 0, u.morale) } : u);
+    log.push({ text: "敵：士気鼓舞（全体士気+3）", type: "cpu" });
+  } else {
+    // attack → 通常攻撃は自動攻撃フェーズに任せる
+    log.push({ text: "敵：攻撃準備完了", type: "cpu" });
+  }
+
+  pU = pU.map(u => checkMoraleCollapse(u, pU, log));
+
+  return { playerUnits: pU, enemyUnits: eU };
+}
+
+function drawCards(deck, hand, count) {
+  const newDeck = [...deck];
+  const newHand = [...hand];
+  for (let i = 0; i < count && newDeck.length > 0; i++) {
+    const idx = Math.floor(Math.random() * newDeck.length);
+    newHand.push(newDeck.splice(idx, 1)[0]);
+  }
+  return { deck: newDeck, hand: newHand };
+}
+
+function checkBattleEnd(playerUnits, enemyUnits) {
+  const pActive = getActive(playerUnits).length;
+  const eActive = getActive(enemyUnits).length;
+  if (pActive === 0 && eActive === 0) return "draw";
+  if (pActive === 0) return "defeat";
+  if (eActive === 0) return "victory";
+  return null;
+}
+
+// ── INITIAL STATE ─────────────────────────────────────────────────
+function createInitialState(initPlayerUnits, initEnemyUnits) {
+  const shuffled = [...PLAYER_DECK].sort(() => Math.random() - 0.5);
+  const { deck, hand } = drawCards(shuffled, [], 5);
+  const round = 1;
+  const pU = initPlayerUnits || PRESET_PLAYER.map(u => ({ ...u }));
+  const eU = initEnemyUnits  || PRESET_ENEMY.map(u => ({ ...u }));
+  const cpuPlan = planCpuAction(eU, pU, round);
+  return {
+    phase: "player",       // player | auto | cpu | end
+    round,
+    ap: 3,
+    maxAp: 4,
+    playerUnits: pU,
+    enemyUnits:  eU,
+    deck,
+    hand,
+    discard: [],
+    log: [
+      { text: "─── 戦闘開始 ─── 攻撃側先攻", type: "system" },
+      { text: `ラウンド1 開始 — 行動ポイント: 3`, type: "system" },
+    ],
+    cpuPlan,
+    selectedCard: null,
+    targetMode: null,       // null | "player" | "enemy"
+    selectedTarget: null,
+    result: null,           // null | "victory" | "defeat" | "draw"
+    showMalliganModal: true,
+    malliganDone: false,
+    nextRoundAtk: 0,        // 戦意高揚の効果
+  };
+}
+
+// ── COMPONENTS ────────────────────────────────────────────────────
+
+function MoraleBar({ current, max, name }) {
+  const pct = Math.max(0, current / max);
+  const color = pct < 0.35 ? C.red : pct < 0.6 ? C.warn : C.morale;
+  const isLow = current <= MORALE_THRESHOLD;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
+      <span style={{ fontSize: 9, color: C.textDim, width: 26, textAlign: "right" }}>士気</span>
+      <div style={{ flex: 1, height: 5, background: "#1a1610", borderRadius: 2, overflow: "hidden" }}>
+        <div style={{ width: `${pct * 100}%`, height: "100%", background: color, borderRadius: 2,
+          boxShadow: isLow ? `0 0 6px ${C.red}80` : "none",
+          transition: "width 0.4s ease" }} />
+      </div>
+      <span style={{ fontSize: 9, color: isLow ? C.red : C.textDim, minWidth: 18, fontWeight: isLow ? "bold" : "normal" }}>
+        {current}/{max}
+      </span>
+      {isLow && <span style={{ fontSize: 8, color: C.red }}>⚠</span>}
+    </div>
+  );
+}
+
+function HpBar({ current, max }) {
+  const pct = Math.max(0, current / max);
+  const color = pct < 0.3 ? C.red : pct < 0.6 ? C.warn : C.hp;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
+      <span style={{ fontSize: 9, color: C.textDim, width: 26, textAlign: "right" }}>HP</span>
+      <div style={{ flex: 1, height: 5, background: "#1a1610", borderRadius: 2, overflow: "hidden" }}>
+        <div style={{ width: `${pct * 100}%`, height: "100%", background: color, borderRadius: 2, transition: "width 0.4s ease" }} />
+      </div>
+      <span style={{ fontSize: 9, color: C.textDim, minWidth: 18 }}>{current}/{max}</span>
+    </div>
+  );
+}
+
+function UnitCard({ unit, selected, onClick, dimmed, showTarget }) {
+  const isDead    = unit.status === "dead";
+  const isRouted  = unit.status === "routed";
+  const isLowMorale = unit.currentMorale <= MORALE_THRESHOLD && !isDead && !isRouted;
+
+  const borderColor = selected ? C.gold :
+    showTarget ? C.red :
+    isDead ? "#2a1a10" :
+    isRouted ? "#2a2010" :
+    isLowMorale ? C.redDim :
+    C.border;
+
+  const bgColor = selected ? "#1c1808" :
+    showTarget ? "#1c0808" :
+    isDead ? "#0f0a08" :
+    isRouted ? "#141008" :
+    C.panel;
+
+  return (
+    <div
+      onClick={!isDead && !isRouted && onClick ? onClick : undefined}
+      style={{
+        background: bgColor,
+        border: `1px solid ${borderColor}`,
+        borderRadius: 4,
+        padding: "8px 10px",
+        cursor: isDead || isRouted ? "default" : onClick ? "pointer" : "default",
+        opacity: isDead ? 0.4 : isRouted ? 0.6 : dimmed ? 0.5 : 1,
+        transition: "all 0.2s",
+        position: "relative",
+        minWidth: 110,
+      }}
+    >
+      {/* 状態バッジ */}
+      {(isDead || isRouted) && (
+        <div style={{
+          position: "absolute", top: 4, right: 4,
+          fontSize: 8, padding: "1px 4px",
+          background: isDead ? C.redDim : "#2a2010",
+          color: isDead ? C.red : C.warn,
+          borderRadius: 2,
+        }}>
+          {isDead ? "戦死" : "離脱"}
+        </div>
+      )}
+      {isLowMorale && !isDead && !isRouted && (
+        <div style={{
+          position: "absolute", top: 4, right: 4,
+          fontSize: 8, padding: "1px 4px",
+          background: C.redDim, color: C.red, borderRadius: 2,
+          animation: "pulse 1s ease-in-out infinite",
+        }}>⚠ 士気危険</div>
+      )}
+
+      {/* 名前 */}
+      <div style={{ fontSize: 12, color: isDead || isRouted ? C.textDim : C.text, marginBottom: 4, fontFamily: "serif" }}>
+        {unit.name}
+        <span style={{ fontSize: 9, color: C.textMuted, marginLeft: 6 }}>
+          {unit.pos === "front" ? "前衛" : "後衛"}
+        </span>
+      </div>
+
+      {/* バー */}
+      {!isDead && <HpBar current={unit.currentHp} max={unit.hp} />}
+      {!isDead && <MoraleBar current={unit.currentMorale} max={unit.morale} />}
+
+      {/* ステータス */}
+      {!isDead && !isRouted && (
+        <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+          <span style={{ fontSize: 10, color: C.gold }}>ATK {unit.currentAtk}</span>
+          {unit.currentArmor > 0 && <span style={{ fontSize: 10, color: C.blue }}>防具 {unit.currentArmor}</span>}
+          {unit.traits.map(t => (
+            <span key={t} style={{ fontSize: 8, color: C.textDim, border: `1px solid ${C.border}`, padding: "0 3px", borderRadius: 2 }}>
+              {t === "COMMANDER" ? "司令官" : t === "MERCENARY" ? "傭兵" : t === "RANGED" ? "遠射" : t === "TANK" ? "重装" : t}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CardWidget({ card, selected, onClick, disabled, tooExpensive }) {
+  const typeColor = {
+    buff: C.green, defend: C.blue, attack: C.red, morale: C.warn, debuff: C.warn,
+  }[card.type] || C.textDim;
+
+  return (
+    <div
+      onClick={!disabled && onClick ? onClick : undefined}
+      style={{
+        background: selected ? "#1c1808" : C.panel,
+        border: `1.5px solid ${selected ? C.gold : tooExpensive ? C.border : typeColor + "60"}`,
+        borderRadius: 5,
+        padding: "10px 12px",
+        cursor: disabled ? "default" : "pointer",
+        opacity: tooExpensive ? 0.4 : disabled ? 0.5 : 1,
+        width: 140,
+        flexShrink: 0,
+        transition: "all 0.15s",
+        position: "relative",
+      }}
+    >
+      {/* コストバッジ */}
+      <div style={{
+        position: "absolute", top: -8, right: 8,
+        width: 20, height: 20, borderRadius: "50%",
+        background: tooExpensive ? C.textMuted : C.gold,
+        color: C.bg, fontSize: 11, fontWeight: "bold",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        border: `1px solid ${C.bg}`,
+      }}>
+        {card.cost}
+      </div>
+
+      {/* タイプ */}
+      <div style={{ fontSize: 8, color: typeColor, letterSpacing: "0.2em", marginBottom: 3, textTransform: "uppercase" }}>
+        {{ buff: "強化", defend: "防御", attack: "攻撃", morale: "士気", debuff: "妨害" }[card.type] || card.type}
+      </div>
+
+      {/* 名前 */}
+      <div style={{ fontSize: 12, color: C.text, marginBottom: 5, fontFamily: "serif" }}>{card.name}</div>
+
+      {/* 説明 */}
+      <div style={{ fontSize: 9, color: C.textDim, lineHeight: 1.4 }}>{card.desc}</div>
+
+      {selected && (
+        <div style={{ marginTop: 6, fontSize: 9, color: C.gold, textAlign: "center" }}>
+          ↑ 対象を選択してください
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LogEntry({ entry }) {
+  const colorMap = {
+    system: C.textDim, attack: C.red, morale: C.morale, buff: C.green,
+    death: "#ff6040", cpu: C.warn, warn: C.warn,
+  };
+  const color = colorMap[entry.type] || C.text;
+  return (
+    <div style={{ fontSize: 10, color, padding: "2px 0", borderBottom: `1px solid ${C.border}`, lineHeight: 1.5 }}>
+      {entry.text}
+    </div>
+  );
+}
+
+function APBar({ current, max }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <span style={{ fontSize: 10, color: C.textDim }}>行動ポイント</span>
+      {Array.from({ length: max }).map((_, i) => (
+        <div key={i} style={{
+          width: 16, height: 16, borderRadius: 3,
+          background: i < current ? C.ap : "#1a1810",
+          border: `1px solid ${i < current ? C.ap : C.border}`,
+          transition: "all 0.2s",
+        }} />
+      ))}
+      <span style={{ fontSize: 11, color: C.ap, fontWeight: "bold" }}>{current}/{max}</span>
+    </div>
+  );
+}
+
+// ── MAIN COMPONENT ────────────────────────────────────────────────
+function BattleProto({ initialPlayerUnits, initialEnemyUnits, onBattleEnd }) {
+  const [state, setState] = useState(() => createInitialState(initialPlayerUnits, initialEnemyUnits));
+  const logRef = useRef(null);
+
+  useEffect(() => {
+    if (logRef.current) {
+      logRef.current.scrollTop = logRef.current.scrollHeight;
+    }
+  }, [state.log]);
+
+  const addLog = useCallback((entries, prevState) => ({
+    ...prevState,
+    log: [...prevState.log, ...(Array.isArray(entries) ? entries : [entries])],
+  }), []);
+
+  // カード選択
+  const handleSelectCard = useCallback((cardId) => {
+    setState(prev => {
+      if (prev.phase !== "player" || prev.result) return prev;
+      const card = CARDS[cardId];
+      if (!card || card.cost > prev.ap) return prev;
+
+      const needsTarget = ["buff_one", "focus_3x", "morale_enemy_one"].includes(card.effect);
+      const needsEnemy  = ["focus_3x", "morale_enemy_one"].includes(card.effect);
+      const needsPlayer = ["buff_one"].includes(card.effect);
+
+      if (prev.selectedCard === cardId) {
+        return { ...prev, selectedCard: null, targetMode: null, selectedTarget: null };
+      }
+
+      return {
+        ...prev,
+        selectedCard: cardId,
+        targetMode: needsTarget ? (needsEnemy ? "enemy" : "player") : null,
+        selectedTarget: null,
+      };
+    });
+  }, []);
+
+  // カードプレイ実行
+  const handlePlayCard = useCallback((targetId = null) => {
+    setState(prev => {
+      if (!prev.selectedCard || prev.phase !== "player") return prev;
+      const card = CARDS[prev.selectedCard];
+      if (!card || card.cost > prev.ap) return prev;
+
+      const log = [];
+      log.push({ text: `【プレイ】${card.name}（コスト${card.cost}）`, type: "buff" });
+
+      const { playerUnits, enemyUnits } = applyCard(
+        prev.selectedCard, prev.playerUnits, prev.enemyUnits, targetId, log
+      );
+
+      const result = checkBattleEnd(playerUnits, enemyUnits);
+
+      const newDiscard = [...prev.discard, prev.selectedCard];
+      const newHand = prev.hand.filter(id => id !== prev.selectedCard);
+      const newAp = prev.ap - card.cost;
+
+      return {
+        ...prev,
+        playerUnits,
+        enemyUnits,
+        hand: newHand,
+        discard: newDiscard,
+        ap: newAp,
+        selectedCard: null,
+        targetMode: null,
+        selectedTarget: null,
+        log: [...prev.log, ...log],
+        result: result || prev.result,
+      };
+    });
+  }, []);
+
+  // 対象選択
+  const handleSelectTarget = useCallback((unitId) => {
+    setState(prev => {
+      if (!prev.selectedCard || !prev.targetMode) return prev;
+      return { ...prev, selectedTarget: unitId };
+    });
+    // 自動プレイ
+    setTimeout(() => handlePlayCard(unitId), 50);
+  }, [handlePlayCard]);
+
+  // ターン終了
+  const handleEndTurn = useCallback(() => {
+    setState(prev => {
+      if (prev.phase !== "player" || prev.result) return prev;
+      const log = [];
+      log.push({ text: "── ターン終了 → 自動攻撃フェーズ ──", type: "system" });
+
+      // 自動攻撃
+      const { newAttackers: pAfterAttack, newDefenders: eAfterAttack } =
+        autoAttackPhase(prev.playerUnits, prev.enemyUnits, log);
+      log.push({ text: "── 反撃フェーズ ──", type: "system" });
+      const { newAttackers: eAfterCounter, newDefenders: pAfterCounter } =
+        autoAttackPhase(eAfterAttack, pAfterAttack, log);
+
+      const result = checkBattleEnd(pAfterCounter, eAfterCounter);
+
+      if (result) {
+        log.push({ text: `─── 戦闘終了：${result === "victory" ? "🏆 勝利！" : result === "defeat" ? "💀 敗北…" : "引き分け"} ───`, type: "system" });
+        return {
+          ...prev,
+          playerUnits: pAfterCounter,
+          enemyUnits: eAfterCounter,
+          log: [...prev.log, ...log],
+          result,
+          phase: "end",
+        };
+      }
+
+      // 次ラウンド
+      const nextRound = prev.round + 1;
+      const nextAp = clamp(prev.ap + 1, 0, prev.maxAp); // 残ったAP+1（上限4）
+      const drawn = drawCards(prev.deck, prev.hand, 1);
+      const cpuPlan = planCpuAction(eAfterCounter, pAfterCounter, nextRound);
+
+      log.push({ text: `── ラウンド ${nextRound} 開始 — 行動ポイント: ${nextAp} ──`, type: "system" });
+      log.push({ text: `【CPU予告】${cpuPlan.desc}`, type: "cpu" });
+
+      // 戦意高揚ボーナス適用
+      let finalPlayer = pAfterCounter;
+      if (prev.nextRoundAtk > 0) {
+        finalPlayer = finalPlayer.map(u => isAlive(u) ? { ...u, currentAtk: u.currentAtk + prev.nextRoundAtk } : u);
+        log.push({ text: `戦意高揚効果：全味方ATK+${prev.nextRoundAtk}`, type: "buff" });
+      }
+
+      return {
+        ...prev,
+        playerUnits: finalPlayer,
+        enemyUnits: eAfterCounter,
+        phase: "player",
+        round: nextRound,
+        ap: nextAp,
+        deck: drawn.deck,
+        hand: drawn.hand,
+        log: [...prev.log, ...log],
+        cpuPlan,
+        selectedCard: null,
+        targetMode: null,
+        selectedTarget: null,
+        nextRoundAtk: 0,
+      };
+    });
+  }, []);
+
+  // 撤退
+  const handleRetreat = useCallback(() => {
+    setState(prev => {
+      if (prev.phase !== "player" || prev.result) return prev;
+      const log = [
+        { text: "【撤退】戦場を離脱！士気-3・権威-1", type: "warn" },
+        { text: "─── 戦闘終了：撤退 ───", type: "system" },
+      ];
+      return {
+        ...prev,
+        log: [...prev.log, ...log],
+        result: "retreat",
+        phase: "end",
+      };
+    });
+  }, []);
+
+  // マリガン
+  const handleMalligan = useCallback((keepIds) => {
+    setState(prev => {
+      const discard = prev.hand.filter(id => !keepIds.includes(id));
+      const keptHand = prev.hand.filter(id => keepIds.includes(id));
+      const drawn = drawCards(prev.deck, keptHand, 5 - keptHand.length);
+      const cpuPlan = planCpuAction(prev.enemyUnits, prev.playerUnits, prev.round);
+      const log = [
+        { text: `マリガン完了（${discard.length}枚交換）`, type: "system" },
+        { text: `【CPU予告】${cpuPlan.desc}`, type: "cpu" },
+      ];
+      return {
+        ...prev,
+        deck: drawn.deck,
+        hand: drawn.hand,
+        discard: [...prev.discard, ...discard],
+        showMalliganModal: false,
+        malliganDone: true,
+        log: [...prev.log, ...log],
+        cpuPlan,
+      };
+    });
+  }, []);
+
+  const s = state;
+
+  return (
+    <div style={{
+      minHeight: "100vh",
+      background: C.bg,
+      color: C.text,
+      fontFamily: "'Georgia', 'Times New Roman', serif",
+      padding: "16px 20px",
+      position: "relative",
+    }}>
+      <style>{`
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: ${C.bg}; }
+        ::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 2px; }
+      `}</style>
+
+      {/* ── マリガンモーダル ── */}
+      {s.showMalliganModal && (
+        <MalliganModal hand={s.hand} ap={s.ap} onConfirm={handleMalligan} />
+      )}
+
+      {/* ── 結果オーバーレイ ── */}
+      {s.result && (
+        <ResultOverlay result={s.result} onBattleEnd={onBattleEnd} />
+      )}
+
+      {/* HEADER */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, borderBottom: `1px solid ${C.border}`, paddingBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 10, letterSpacing: "0.4em", color: C.textDim }}>BATTLE PROTOTYPE v1.0</div>
+          <div style={{ fontSize: 16, color: C.gold, letterSpacing: "0.1em" }}>⚔ 戦闘フェーズ — ラウンド {s.round}</div>
+        </div>
+        <APBar current={s.ap} max={s.maxAp} />
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={handleRetreat} disabled={!!s.result || s.phase !== "player"} style={{
+            background: "transparent", border: `1px solid ${C.redDim}`, color: C.red,
+            padding: "6px 14px", cursor: "pointer", fontFamily: "serif", fontSize: 11, borderRadius: 3,
+            opacity: s.phase !== "player" || s.result ? 0.4 : 1,
+          }}>
+            撤退
+          </button>
+          <button onClick={handleEndTurn} disabled={!!s.result || s.phase !== "player"} style={{
+            background: s.phase === "player" && !s.result ? "#1c1808" : "transparent",
+            border: `1px solid ${s.phase === "player" && !s.result ? C.gold : C.border}`,
+            color: s.phase === "player" && !s.result ? C.gold : C.textDim,
+            padding: "6px 18px", cursor: "pointer", fontFamily: "serif", fontSize: 12, borderRadius: 3,
+          }}>
+            ターン終了 →
+          </button>
+        </div>
+      </div>
+
+      {/* CPU予告 */}
+      {s.cpuPlan && s.phase === "player" && (
+        <div style={{
+          background: "#110e06", border: `1px solid ${C.warnDim}`, borderRadius: 4,
+          padding: "6px 14px", marginBottom: 12, fontSize: 11, color: C.warn,
+        }}>
+          🔮 CPU行動予告：{s.cpuPlan.desc}
+        </div>
+      )}
+
+      {/* メインレイアウト */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 220px", gap: 16, marginBottom: 16 }}>
+
+        {/* 左：戦場 */}
+        <div>
+          {/* 自軍 */}
+          <SidePanel
+            label="自軍（プレイヤー）"
+            units={s.playerUnits}
+            color={C.blue}
+            targetMode={s.targetMode === "player" ? "player" : null}
+            selectedTarget={s.selectedTarget}
+            onSelectTarget={s.targetMode === "player" ? handleSelectTarget : null}
+            onCardPlay={s.selectedCard && !s.targetMode ? handlePlayCard : null}
+          />
+
+          <div style={{ height: 8 }} />
+
+          {/* 敵軍 */}
+          <SidePanel
+            label="敵軍（CPU：商人勢力）"
+            units={s.enemyUnits}
+            color={C.red}
+            targetMode={s.targetMode === "enemy" ? "enemy" : null}
+            selectedTarget={s.selectedTarget}
+            onSelectTarget={s.targetMode === "enemy" ? handleSelectTarget : null}
+          />
+        </div>
+
+        {/* 右：ログ */}
+        <div style={{
+          background: C.panel, border: `1px solid ${C.border}`, borderRadius: 4,
+          padding: 10, display: "flex", flexDirection: "column",
+        }}>
+          <div style={{ fontSize: 9, color: C.textDim, letterSpacing: "0.2em", marginBottom: 6 }}>■ 戦闘ログ</div>
+          <div ref={logRef} style={{ flex: 1, overflowY: "auto", maxHeight: 320 }}>
+            {s.log.map((entry, i) => <LogEntry key={i} entry={entry} />)}
+          </div>
+        </div>
+      </div>
+
+      {/* 手札 */}
+      <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+        <div style={{ fontSize: 9, color: C.textDim, letterSpacing: "0.2em", marginBottom: 10 }}>
+          ■ 手札（{s.hand.length}枚） — デッキ残{s.deck.length}枚
+          {s.selectedCard && (
+            <span style={{ marginLeft: 12, color: C.gold }}>
+              {s.targetMode
+                ? `→ ${s.targetMode === "enemy" ? "敵" : "味方"}ユニットをクリックして対象選択`
+                : "→ もう一度クリックでプレイ、別カードで切り替え"}
+            </span>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 8 }}>
+          {s.hand.length === 0 ? (
+            <div style={{ color: C.textDim, fontSize: 11 }}>手札なし（ターン終了でドロー）</div>
+          ) : (
+            s.hand.map(cardId => {
+              const card = CARDS[cardId];
+              if (!card) return null;
+              const tooExpensive = card.cost > s.ap;
+              const isSelected   = s.selectedCard === cardId;
+              return (
+                <CardWidget
+                  key={cardId + Math.random()}
+                  card={card}
+                  selected={isSelected}
+                  disabled={tooExpensive || s.phase !== "player" || !!s.result}
+                  tooExpensive={tooExpensive}
+                  onClick={() => {
+                    if (isSelected && !s.targetMode) {
+                      handlePlayCard(null);
+                    } else {
+                      handleSelectCard(cardId);
+                    }
+                  }}
+                />
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── SIDE PANEL ────────────────────────────────────────────────────
+function SidePanel({ label, units, color, targetMode, selectedTarget, onSelectTarget, onCardPlay }) {
+  const front = units.filter(u => u.pos === "front");
+  const rear  = units.filter(u => u.pos === "rear");
+
+  return (
+    <div style={{ background: C.panel, border: `1px solid ${color}30`, borderRadius: 4, padding: 12 }}>
+      <div style={{ fontSize: 10, color, letterSpacing: "0.2em", marginBottom: 10 }}>■ {label}</div>
+
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+        <span style={{ fontSize: 9, color: C.textDim, alignSelf: "center", minWidth: 30 }}>前衛</span>
+        {front.map(u => (
+          <UnitCard
+            key={u.id}
+            unit={u}
+            selected={selectedTarget === u.id}
+            showTarget={!!targetMode && u.status === "active"}
+            onClick={targetMode && u.status === "active"
+              ? () => onSelectTarget(u.id)
+              : onCardPlay && u.status === "active"
+              ? () => onCardPlay(u.id)
+              : null}
+            dimmed={!!targetMode && u.status !== "active"}
+          />
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 9, color: C.textDim, alignSelf: "center", minWidth: 30 }}>後衛</span>
+        {rear.map(u => (
+          <UnitCard
+            key={u.id}
+            unit={u}
+            selected={selectedTarget === u.id}
+            showTarget={!!targetMode && u.status === "active"}
+            onClick={targetMode && u.status === "active"
+              ? () => onSelectTarget(u.id)
+              : onCardPlay && u.status === "active"
+              ? () => onCardPlay(u.id)
+              : null}
+            dimmed={!!targetMode && u.status !== "active"}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── MALLIGAN MODAL ────────────────────────────────────────────────
+function MalliganModal({ hand, ap, onConfirm }) {
+  const [kept, setKept] = useState(hand);
+
+  const toggle = (id) => {
+    setKept(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "#000000c0", zIndex: 100,
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      <div style={{
+        background: C.panelLight, border: `1px solid ${C.goldDim}`, borderRadius: 8,
+        padding: 28, maxWidth: 720, width: "90%",
+        animation: "fadeIn 0.3s ease",
+      }}>
+        <div style={{ fontSize: 11, color: C.textDim, letterSpacing: "0.3em", marginBottom: 4 }}>OPENING HAND</div>
+        <div style={{ fontSize: 18, color: C.gold, marginBottom: 6 }}>マリガン</div>
+        <div style={{ fontSize: 11, color: C.textDim, marginBottom: 18 }}>
+          残したいカードをクリックして選択（グレー＝交換、ハイライト＝残す）
+        </div>
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
+          {hand.map(cardId => {
+            const card = CARDS[cardId];
+            if (!card) return null;
+            const isKept = kept.includes(cardId);
+            return (
+              <div key={cardId} onClick={() => toggle(cardId)} style={{
+                background: isKept ? "#1c1808" : C.panel,
+                border: `1.5px solid ${isKept ? C.gold : C.border}`,
+                borderRadius: 5, padding: "10px 12px", cursor: "pointer",
+                width: 130, transition: "all 0.15s",
+              }}>
+                <div style={{ fontSize: 8, color: isKept ? C.gold : C.textDim, marginBottom: 2 }}>
+                  {isKept ? "✓ キープ" : "交換"}
+                </div>
+                <div style={{ fontSize: 13, color: C.text, marginBottom: 4 }}>{card.name}</div>
+                <div style={{ fontSize: 9, color: C.textDim }}>{card.desc}</div>
+                <div style={{ marginTop: 6, fontSize: 10, color: C.gold }}>コスト {card.cost}</div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontSize: 10, color: C.textDim }}>
+            キープ: {kept.length}枚 / 交換: {hand.length - kept.length}枚
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={() => onConfirm([])} style={{
+              background: "transparent", border: `1px solid ${C.border}`,
+              color: C.textDim, padding: "7px 16px", cursor: "pointer",
+              fontFamily: "serif", fontSize: 11, borderRadius: 3,
+            }}>全部交換</button>
+            <button onClick={() => onConfirm(kept)} style={{
+              background: "#1c1808", border: `1px solid ${C.gold}`,
+              color: C.gold, padding: "7px 20px", cursor: "pointer",
+              fontFamily: "serif", fontSize: 12, borderRadius: 3,
+            }}>決定</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── RESULT OVERLAY ────────────────────────────────────────────────
+function ResultOverlay({ result, onBattleEnd }) {
+  const config = {
+    victory: { label: "🏆 勝利！", color: C.gold,  desc: "敵勢力を撃退した。権威+1" },
+    defeat:  { label: "💀 敗北…", color: C.red,   desc: "全軍壊滅。次の策を練れ。" },
+    retreat: { label: "🚩 撤退",  color: C.warn,  desc: "損切りに成功。権威-1・士気-3" },
+    draw:    { label: "⚖ 引き分け", color: C.blue, desc: "双方消耗。戦線は膠着した。" },
+  }[result] || { label: result, color: C.text, desc: "" };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "#000000a0", zIndex: 90,
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      <div style={{
+        background: C.panelLight, border: `2px solid ${config.color}60`,
+        borderRadius: 8, padding: "36px 48px", textAlign: "center",
+        animation: "fadeIn 0.4s ease",
+      }}>
+        <div style={{ fontSize: 36, marginBottom: 12 }}>{config.label}</div>
+        <div style={{ fontSize: 13, color: C.textDim, marginBottom: 24 }}>{config.desc}</div>
+        <button onClick={() => onBattleEnd && onBattleEnd(result)} style={{
+          background: "#1c1808", border: `1px solid ${C.gold}`,
+          color: C.gold, padding: "10px 28px", cursor: "pointer",
+          fontFamily: "serif", fontSize: 13, borderRadius: 4,
+        }}>
+          戦場を離れる
+        </button>
+      </div>
+    </div>
+  );
+}
+
+window.BattleProtoComponent = BattleProto;
+
+</script>
+</body>
+</html>
