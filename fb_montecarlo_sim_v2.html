@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>軍人 FB編成 モンテカルロシミュレーター v2</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
+
+  :root {
+    --bg-deep:    #0a0d12;
+    --bg-panel:   #161c28;
+    --bg-card:    #1c2333;
+    --gold:       #c9a84c;
+    --gold-dim:   #7a6030;
+    --gold-faint: #3a2e10;
+    --red:        #e74c3c;
+    --blue:       #4a9fd4;
+    --green:      #4caf7d;
+    --amber:      #e8a020;
+    --text-main:  #d4c4a0;
+    --text-dim:   #6a7a90;
+    --border:     #2a3548;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg-deep);
+    color: var(--text-main);
+    font-family: 'Crimson Text', serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  header {
+    width: 100%;
+    text-align: center;
+    padding: 24px 20px 14px;
+    border-bottom: 1px solid var(--gold-dim);
+  }
+  header h1 {
+    font-family: 'Cinzel', serif;
+    font-size: 1.45rem;
+    font-weight: 900;
+    color: var(--gold);
+    letter-spacing: 0.12em;
+  }
+  header p { font-size: 0.82rem; color: var(--text-dim); margin-top: 5px; line-height: 1.6; }
+
+  .main { width: 100%; max-width: 860px; padding: 20px 20px 60px; }
+
+  .sec {
+    font-family: 'Cinzel', serif;
+    font-size: 0.68rem;
+    color: var(--gold-dim);
+    letter-spacing: 0.2em;
+    margin: 1.6rem 0 10px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid var(--gold-faint);
+  }
+
+  /* ── Goal Cards ── */
+  .goal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .gc {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 13px 15px;
+    cursor: pointer;
+  }
+  .gc:hover { border-color: var(--gold-dim); }
+  .gc.active { border: 2px solid var(--gold); }
+  .gc .gt { font-family: 'Cinzel', serif; font-size: 0.85rem; color: var(--gold); margin-bottom: 5px; }
+  .gc .gd { font-size: 0.8rem; color: var(--text-dim); line-height: 1.6; }
+  .gc .gcost { font-size: 0.78rem; color: var(--amber); margin-top: 5px; }
+
+  /* ── Param Grid ── */
+  .pgrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .pgrid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .pc {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 13px;
+  }
+  .pc label { display: block; font-size: 0.72rem; color: var(--text-dim); letter-spacing: 0.05em; margin-bottom: 5px; }
+  .pc input[type=range] { width: 100%; accent-color: var(--gold); }
+  .pc select {
+    width: 100%;
+    background: var(--bg-deep);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    padding: 4px 6px;
+    font-family: 'Crimson Text', serif;
+    font-size: 0.83rem;
+    border-radius: 3px;
+  }
+  .pv { font-size: 0.88rem; color: var(--gold); font-weight: 700; margin-top: 3px; }
+
+  /* AP配分ビジュアル */
+  .ap-vis {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 13px;
+    grid-column: span 3;
+  }
+  .ap-vis label { display: block; font-size: 0.72rem; color: var(--text-dim); margin-bottom: 8px; }
+  .ap-bar { display: flex; gap: 4px; margin-bottom: 6px; }
+  .ap-seg {
+    height: 18px;
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-family: 'Cinzel', serif;
+    letter-spacing: 0.05em;
+    transition: width 0.2s;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .ap-legend { display: flex; gap: 14px; font-size: 0.7rem; color: var(--text-dim); }
+  .ap-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
+
+  /* ── Run Button ── */
+  .run-btn {
+    display: block; width: 100%; margin: 1.2rem 0 0.2rem;
+    padding: 12px;
+    background: var(--gold-faint);
+    border: 1px solid var(--gold-dim);
+    color: var(--gold);
+    font-family: 'Cinzel', serif;
+    font-size: 0.88rem;
+    letter-spacing: 0.2em;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.15s;
+  }
+  .run-btn:hover { background: #4a3a10; }
+  .run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Gold Summary ── */
+  .gold-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .gcell {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 9px 10px;
+    text-align: center;
+  }
+  .gcell .gl { font-size: 0.7rem; color: var(--text-dim); margin-bottom: 3px; }
+  .gcell .gv { font-size: 1.1rem; font-weight: 700; color: var(--amber); font-family: 'Cinzel', serif; }
+
+  /* ── Metric Cards ── */
+  .rgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .mc {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 11px 8px;
+    text-align: center;
+  }
+  .mc .ml { font-size: 0.68rem; color: var(--text-dim); margin-bottom: 3px; }
+  .mc .mv { font-size: 1.45rem; font-weight: 700; font-family: 'Cinzel', serif; }
+  .mc .ms { font-size: 0.68rem; color: var(--text-dim); margin-top: 2px; }
+  .cg { color: var(--green); }
+  .ca { color: var(--amber); }
+  .cr { color: var(--red); }
+  .cb { color: var(--blue); }
+
+  /* ── Histogram ── */
+  .hist-outer {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 13px;
+  }
+  .hist-bars { display: flex; align-items: flex-end; gap: 2px; height: 88px; margin-bottom: 4px; }
+  .hb { flex: 1; border-radius: 2px 2px 0 0; min-height: 2px; }
+  .hlabels { display: flex; justify-content: space-between; font-size: 0.68rem; color: var(--text-dim); margin-bottom: 8px; }
+  .hlegend { display: flex; gap: 14px; font-size: 0.7rem; color: var(--text-dim); }
+  .hdot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
+
+  /* ── Bottleneck ── */
+  .bbox {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 13px 15px;
+    font-size: 0.86rem;
+    line-height: 1.75;
+  }
+  .bbox .bt {
+    font-family: 'Cinzel', serif;
+    font-size: 0.72rem;
+    color: var(--gold-dim);
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+  }
+
+  /* ── Tags ── */
+  .tag {
+    display: inline-block;
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 3px;
+    margin-right: 4px;
+    font-family: 'Cinzel', serif;
+    letter-spacing: 0.04em;
+  }
+  .tg { background: #1a3a2a; color: var(--green);  border: 1px solid #2a5a3a; }
+  .ta { background: #3a2a08; color: var(--amber);  border: 1px solid #5a4010; }
+  .tr { background: #3a1010; color: var(--red);    border: 1px solid #5a1818; }
+  .tb { background: #102030; color: var(--blue);   border: 1px solid #1a3a50; }
+
+  /* ── AP設計示唆 ── */
+  .insight-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .insight-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 12px;
+  }
+  .insight-card .il { font-size: 0.7rem; color: var(--text-dim); margin-bottom: 4px; }
+  .insight-card .iv { font-size: 1.1rem; font-weight: 700; font-family: 'Cinzel', serif; }
+  .insight-card .id { font-size: 0.72rem; color: var(--text-dim); margin-top: 3px; }
+
+  .note {
+    font-size: 0.74rem;
+    color: var(--text-dim);
+    margin-top: 1.2rem;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    line-height: 1.7;
+  }
+
+  #resultArea { display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⚔ 軍人 FB編成 モンテカルロシミュレーター v2</h1>
+  <p>
+    「正規兵の雇用（候補1体／AP1）」カードをプレイした回数だけ正規兵8種から1体抽選。<br>
+    毎ターンのAP配分・デッキ枚数・ドラフト増強を変えて、25ターン以内に2軍団12体を揃える確率を計算する。
+  </p>
+</header>
+
+<div class="main">
+
+  <!-- Goal -->
+  <div class="sec">目標編成を選択</div>
+  <div class="goal-grid">
+    <div class="gc active" data-id="0" onclick="selGoal(0)">
+      <div class="gt">プランA：FB3 + FB3</div>
+      <div class="gd">軍団A: 槍兵×3 ＋ 任意×3（6体）<br>軍団B: 槍兵×3 ＋ 任意×3（6体）</div>
+      <div class="gcost">FB枠：金12　任意枠：金18（金3平均）　計：金30〜</div>
+    </div>
+    <div class="gc" data-id="1" onclick="selGoal(1)">
+      <div class="gt">プランB：FB5 + FBなし</div>
+      <div class="gd">軍団A: 槍兵×5 ＋ 任意×1（6体）<br>軍団B: 任意×6（6体）</div>
+      <div class="gcost">FB枠：金10　任意枠：金21（金3平均）　計：金31〜</div>
+    </div>
+  </div>
+
+  <!-- Deck & AP params -->
+  <div class="sec">デッキ・AP設定</div>
+  <div class="pgrid" style="grid-template-columns:1fr 1fr 1fr 1fr">
+    <div class="pc">
+      <label>初期デッキの「正規兵の雇用」枚数</label>
+      <input type="range" min="1" max="4" step="1" value="1" id="initHire"
+             oninput="updParam('initHire','initHireV',v=>v+'枚'); updApBar()">
+      <div class="pv" id="initHireV">1枚</div>
+    </div>
+    <div class="pc">
+      <label>ドラフトで追加（最終的な合計枚数）</label>
+      <input type="range" min="1" max="6" step="1" value="2" id="totalHire"
+             oninput="updParam('totalHire','totalHireV',v=>v+'枚'); clampInitHire(); updApBar()">
+      <div class="pv" id="totalHireV">2枚（合計）</div>
+    </div>
+    <div class="pc">
+      <label>初期デッキ総枚数</label>
+      <input type="range" min="8" max="15" step="1" value="10" id="deckSize"
+             oninput="updParam('deckSize','deckSizeV',v=>v+'枚'); updApBar()">
+      <div class="pv" id="deckSizeV">10枚</div>
+    </div>
+    <div class="pc">
+      <label>「正規兵の雇用」1回の候補数</label>
+      <input type="range" min="1" max="3" step="1" value="1" id="candidates"
+             oninput="updCandidates()">
+      <div class="pv" id="candidatesV">1体</div>
+      <div style="font-size:0.7rem;color:var(--text-dim);margin-top:3px" id="candidatesDesc">→ 現行GDD設定</div>
+    </div>
+  </div>
+
+  <div class="pgrid" style="grid-template-columns:1fr 1fr 1fr">
+    <div class="pc">
+      <label>毎ターン雇用APに使う量（平均）</label>
+      <input type="range" min="0" max="3" step="1" value="1" id="hireAP"
+             oninput="updParam('hireAP','hireAPV',v=>'AP'+v); updApBar()">
+      <div class="pv" id="hireAPV">AP1</div>
+    </div>
+    <div class="pc">
+      <label>都市発展・施設等に使うAP（平均）</label>
+      <input type="range" min="0" max="3" step="1" value="1" id="devAP"
+             oninput="updParam('devAP','devAPV',v=>'AP'+v); updApBar()">
+      <div class="pv" id="devAPV">AP1</div>
+    </div>
+    <div class="pc">
+      <label>残りAP（索敵・その他・温存）</label>
+      <div class="pv" id="restAPV" style="margin-top:8px;color:var(--text-dim)">AP1</div>
+    </div>
+  </div>
+
+  <!-- AP bar -->
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:4px;padding:10px 13px;margin-bottom:10px">
+    <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:7px">AP3 配分イメージ（毎ターン）</div>
+    <div class="ap-bar" id="apBar"></div>
+    <div class="ap-legend">
+      <span><span class="ap-dot" style="background:#4a9fd4"></span>雇用</span>
+      <span><span class="ap-dot" style="background:#4caf7d"></span>都市発展・施設</span>
+      <span><span class="ap-dot" style="background:#6a7a90"></span>その他・温存</span>
+    </div>
+  </div>
+
+  <!-- Income & trial params -->
+  <div class="sec">収入・シミュレーション設定</div>
+  <div class="pgrid">
+    <div class="pc">
+      <label>初期金収入（/ターン）</label>
+      <input type="range" min="2" max="6" step="1" value="3" id="income"
+             oninput="updParam('income','incomeV',v=>'金'+v)">
+      <div class="pv" id="incomeV">金3</div>
+    </div>
+    <div class="pc">
+      <label>ターン上限</label>
+      <input type="range" min="15" max="30" step="1" value="25" id="tlimit"
+             oninput="updParam('tlimit','tlimitV',v=>'T'+v)">
+      <div class="pv" id="tlimitV">T25</div>
+    </div>
+    <div class="pc">
+      <label>試行回数</label>
+      <select id="trialN">
+        <option value="500">500回</option>
+        <option value="1000" selected>1000回</option>
+        <option value="3000">3000回</option>
+      </select>
+    </div>
+  </div>
+
+  <button class="run-btn" id="runBtn" onclick="runSim()">▶ モンテカルロ実行</button>
+
+  <!-- Results -->
+  <div id="resultArea">
+
+    <div class="sec">金収支（達成ランの平均）</div>
+    <div class="gold-row">
+      <div class="gcell"><div class="gl">ユニット購入金（平均）</div><div class="gv" id="gUnit">—</div></div>
+      <div class="gcell"><div class="gl">進軍コスト</div><div class="gv" id="gMarch">—</div></div>
+      <div class="gcell"><div class="gl">25T総収入（平均）</div><div class="gv" id="gTotal">—</div></div>
+      <div class="gcell"><div class="gl">収支余裕（平均）</div><div class="gv" id="gMargin">—</div></div>
+    </div>
+
+    <div class="sec">AP使用実績（達成ランの平均）</div>
+    <div class="insight-grid">
+      <div class="insight-card">
+        <div class="il">雇用カードプレイ回数（合計）</div>
+        <div class="iv cb" id="iHirePlays">—</div>
+        <div class="id">25T通算</div>
+      </div>
+      <div class="insight-card">
+        <div class="il">FB枠ユニット引き当て回数</div>
+        <div class="iv cg" id="iFBHits">—</div>
+        <div class="id">槍兵出現回数</div>
+      </div>
+      <div class="insight-card">
+        <div class="il">FB枠引き当て率</div>
+        <div class="iv ca" id="iFBRate">—</div>
+        <div class="id">プレイ回数あたり（理論値1/8=12.5%）</div>
+      </div>
+    </div>
+
+    <div class="sec">結果サマリー</div>
+    <div class="rgrid">
+      <div class="mc"><div class="ml">目標達成率</div><div class="mv cg" id="rAch">—</div><div class="ms">T上限以内</div></div>
+      <div class="mc"><div class="ml">平均達成ターン</div><div class="mv cb" id="rAvg">—</div><div class="ms">達成ランのみ</div></div>
+      <div class="mc"><div class="ml">金不足で失敗</div><div class="mv ca" id="rGF">—</div><div class="ms">ユニットは出た</div></div>
+      <div class="mc"><div class="ml">未出現で失敗</div><div class="mv cr" id="rUF">—</div><div class="ms">引き当てられず</div></div>
+    </div>
+
+    <div class="sec">達成ターン分布</div>
+    <div class="hist-outer">
+      <div class="hist-bars" id="histBars"></div>
+      <div class="hlabels" id="histLabels"></div>
+      <div class="hlegend">
+        <span><span class="hdot" style="background:#4a9fd4"></span>前半達成</span>
+        <span><span class="hdot" style="background:#e8a020"></span>後半達成</span>
+        <span><span class="hdot" style="background:#e74c3c"></span>終盤達成</span>
+      </div>
+    </div>
+
+    <div class="sec">ボトルネック分析 ＆ 設計示唆</div>
+    <div class="bbox">
+      <div class="bt">■ 設計示唆レポート</div>
+      <div id="btlContent"></div>
+    </div>
+
+    <div class="note" id="anote"></div>
+  </div>
+
+</div><!-- /main -->
+
+<script>
+// ── Unit Pool（正規兵8種のみ・均等） ──
+const POOL = [
+  { name:'槍兵',     type:'槍',   cost:2 },
+  { name:'重装歩兵', type:'重装', cost:3 },
+  { name:'騎馬兵',   type:'騎馬', cost:3 },
+  { name:'騎士',     type:'騎馬', cost:4 },
+  { name:'弓兵',     type:'弓',   cost:2 },
+  { name:'弩兵',     type:'弓',   cost:3 },
+  { name:'司令官',   type:'支援', cost:4 },
+  { name:'斥候',     type:'偵察', cost:3 },
+];
+const POOL_SIZE = POOL.length; // 8
+
+// ── 任意枠：ランダムにPOOLから（槍兵以外でもOK、金3平均）
+const ANY_AVG_COST = 3;
+
+// ── Goals ──
+const GOALS = [
+  { label:'FB3+FB3',    fbType:'槍', fbA:3, fbB:3, anyA:3, anyB:3 },
+  { label:'FB5+FBなし', fbType:'槍', fbA:5, fbB:0, anyA:1, anyB:6 },
+];
+
+let selectedGoal = 0;
+
+function selGoal(id) {
+  selectedGoal = id;
+  document.querySelectorAll('.gc').forEach(c => c.classList.remove('active'));
+  document.querySelector('[data-id="'+id+'"]').classList.add('active');
+}
+
+function updCandidates() {
+  const v = parseInt(document.getElementById('candidates').value);
+  document.getElementById('candidatesV').textContent = v+'体';
+  const desc = v===1 ? '→ 現行GDD設定（正規兵の雇用）'
+             : v===2 ? '→ 候補2体から選択（精鋭徴兵相当）'
+             :          '→ 候補3体から選択（傭兵の雇用に近い）';
+  document.getElementById('candidatesDesc').textContent = desc;
+  // FB引き当て理論値も更新
+  const fbProb = 1 - Math.pow((POOL_SIZE-1)/POOL_SIZE, v);
+  document.getElementById('iFBRate').nextElementSibling
+    && (document.getElementById('iFBRate').parentElement.querySelector('.id').textContent =
+      `プレイ回数あたり（理論値${Math.round(fbProb*1000)/10}%）`);
+}
+
+function updParam(id, outId, fmt) {
+  const v = parseInt(document.getElementById(id).value);
+  document.getElementById(outId).textContent = fmt(v);
+}
+
+function clampInitHire() {
+  const init  = document.getElementById('initHire');
+  const total = parseInt(document.getElementById('totalHire').value);
+  if (parseInt(init.value) > total) { init.value = total; document.getElementById('initHireV').textContent = total+'枚'; }
+}
+
+function updApBar() {
+  const hire = parseInt(document.getElementById('hireAP').value);
+  const dev  = parseInt(document.getElementById('devAP').value);
+  const rest = Math.max(0, 3 - hire - dev);
+  document.getElementById('restAPV').textContent = 'AP' + rest;
+
+  const total = 3;
+  const bar   = document.getElementById('apBar');
+  const segs  = [
+    { w: hire/total, color:'#4a9fd4', label:'雇用 AP'+hire },
+    { w: dev/total,  color:'#4caf7d', label:'発展 AP'+dev  },
+    { w: rest/total, color:'#3a4a5a', label:'他 AP'+rest   },
+  ];
+  bar.innerHTML = segs.map(s =>
+    `<div class="ap-seg" style="width:${Math.round(s.w*100)}%;background:${s.color};color:#fff;min-width:${s.w>0?'30px':'0'}">${s.w>0?s.label:''}</div>`
+  ).join('');
+}
+
+// ── Simulation ──
+function runSim() {
+  const goal      = GOALS[selectedGoal];
+  const initHire  = parseInt(document.getElementById('initHire').value);
+  const totalHire = parseInt(document.getElementById('totalHire').value);
+  const deckSize  = parseInt(document.getElementById('deckSize').value);
+  const hireAP    = parseInt(document.getElementById('hireAP').value);
+  const candidates= parseInt(document.getElementById('candidates').value);
+  const baseInc   = parseInt(document.getElementById('income').value);
+  const tlimit    = parseInt(document.getElementById('tlimit').value);
+  const trialN    = parseInt(document.getElementById('trialN').value);
+
+  const MARCH_TURNS = [6, 12, 18];
+
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true; btn.textContent = '⚔ 演算中...';
+
+  setTimeout(() => {
+    let achieved=0, goldFail=0, unitFail=0;
+    const achTurns=[], spentArr=[], incArr=[], hirePlaysArr=[], fbHitsArr=[];
+
+    for (let tr=0; tr<trialN; tr++) {
+      let gold        = 4;
+      let income      = baseInc;
+      let fbAHired    = 0, fbBHired    = 0;
+      let anyAHired   = 0, anyBHired   = 0;
+      let marchsDone  = 0;
+      let goldSpent   = 0;
+      let totalInc    = gold;
+      let hitGoldFail = false;
+      let ok          = false;
+
+      // デッキ構築：ドラフトで追加枚数をどのターンに獲得するか
+      // 初期1枚、ドラフト追加分はT3・T6・T9...に均等に獲得（仮定）
+      let currentHireCards = initHire;
+      const draftAdds = totalHire - initHire; // 追加枚数
+      const draftTurns = [];
+      if (draftAdds > 0) {
+        for (let i=0; i<draftAdds; i++) {
+          draftTurns.push(Math.round((i+1) * tlimit / (draftAdds+1)));
+        }
+      }
+
+      let totalHirePlays = 0;
+      let totalFBHits    = 0;
+
+      const { fbA, fbB, anyA, anyB, fbType } = goal;
+
+      for (let t=1; t<=tlimit; t++) {
+        gold += income;
+        totalInc += income;
+
+        // ドラフトで雇用カード追加
+        if (draftTurns.includes(t)) currentHireCards++;
+
+        // 進軍（収入+1）
+        if (marchsDone < MARCH_TURNS.length && t === MARCH_TURNS[marchsDone]) {
+          if (gold >= 2) { gold -= 2; goldSpent += 2; income += 1; marchsDone++; }
+        }
+
+        // このターンに雇用カードを何回プレイできるか
+        // = min(hireAP, currentHireCards) ※手札に来る確率も加味
+        const handRate      = Math.min(1, currentHireCards / deckSize * 5); // 5枚ドローと仮定
+        const expectedDraws = Math.min(hireAP, Math.floor(currentHireCards)); 
+        // 手札に雇用カードが来る確率的プレイ回数
+        const playsThisTurn = handRate >= 0.5
+          ? (Math.random() < handRate ? Math.min(hireAP, currentHireCards) : Math.max(0, Math.min(hireAP, currentHireCards) - 1))
+          : (Math.random() < handRate ? 1 : 0);
+
+        totalHirePlays += playsThisTurn;
+
+        // 雇用カード1プレイ = 正規兵プールから候補N体を抽選して1体選ぶ
+        for (let p=0; p<playsThisTurn; p++) {
+          // 候補N体を重複なしで抽選
+          const drawn = [];
+          const used  = new Set();
+          for (let c=0; c<candidates && drawn.length<POOL_SIZE; c++) {
+            let pick, tries=0;
+            do { pick = POOL[Math.floor(Math.random()*POOL_SIZE)]; tries++; }
+            while (used.has(pick.name) && tries<20);
+            used.add(pick.name);
+            drawn.push(pick);
+          }
+
+          const needFbA  = fbAHired < fbA;
+          const needFbB  = fbBHired < fbB;
+          const needAnyA = anyAHired < anyA;
+          const needAnyB = anyBHired < anyB;
+
+          // 優先順位：FB枠が必要なら槍兵を優先選択、なければ任意枠として安いものを選ぶ
+          const fbCandidates  = drawn.filter(u => u.type === fbType);
+          const anyCandidates = drawn.filter(u => u.type !== fbType);
+
+          let chosen = null;
+          if (fbCandidates.length > 0 && (needFbA || needFbB)) {
+            chosen = fbCandidates[0];
+          } else if (needAnyA || needAnyB) {
+            // 任意枠：最も安いものを選ぶ
+            chosen = drawn.sort((a,b)=>a.cost-b.cost)[0];
+          } else if (fbCandidates.length > 0) {
+            // FB枠は満たされているが任意枠として使う
+            chosen = fbCandidates[0];
+          }
+
+          if (!chosen) continue;
+
+          const isFB = chosen.type === fbType;
+          const cost = isFB ? chosen.cost : ANY_AVG_COST;
+
+          if (isFB && (needFbA || needFbB)) {
+            if (gold >= cost) {
+              gold -= cost; goldSpent += cost;
+              if (needFbA) fbAHired++; else fbBHired++;
+              totalFBHits++;
+            } else hitGoldFail = true;
+          } else if (needAnyA || needAnyB) {
+            if (gold >= cost) {
+              gold -= cost; goldSpent += cost;
+              if (needAnyA) anyAHired++; else anyBHired++;
+            } else hitGoldFail = true;
+          }
+        }
+
+        if (fbAHired>=fbA && fbBHired>=fbB && anyAHired>=anyA && anyBHired>=anyB) {
+          ok = true;
+          achTurns.push(t);
+          spentArr.push(goldSpent);
+          incArr.push(totalInc);
+          hirePlaysArr.push(totalHirePlays);
+          fbHitsArr.push(totalFBHits);
+          break;
+        }
+      }
+
+      if (ok)             achieved++;
+      else if (hitGoldFail) goldFail++;
+      else                unitFail++;
+    }
+
+    // ── Metrics ──
+    const achRate  = Math.round(achieved  / trialN * 100);
+    const gfRate   = Math.round(goldFail  / trialN * 100);
+    const ufRate   = Math.round(unitFail  / trialN * 100);
+    const avgT     = achTurns.length > 0
+      ? (achTurns.reduce((a,b)=>a+b,0) / achTurns.length).toFixed(1) : null;
+    const avgSpent = spentArr.length > 0
+      ? Math.round(spentArr.reduce((a,b)=>a+b,0) / spentArr.length) : 0;
+    const avgInc   = incArr.length > 0
+      ? Math.round(incArr.reduce((a,b)=>a+b,0) / incArr.length) : 0;
+    const marchGold = [6,12,18].filter(t=>t<=tlimit).length * 2;
+    const avgMargin = avgInc - avgSpent - marchGold;
+
+    const avgHirePlays = hirePlaysArr.length > 0
+      ? Math.round(hirePlaysArr.reduce((a,b)=>a+b,0) / hirePlaysArr.length) : 0;
+    const avgFBHits = fbHitsArr.length > 0
+      ? (fbHitsArr.reduce((a,b)=>a+b,0) / fbHitsArr.length).toFixed(1) : '—';
+    const fbHitRate = avgHirePlays > 0
+      ? Math.round(parseFloat(avgFBHits) / avgHirePlays * 100) : 0;
+
+    // ── DOM ──
+    document.getElementById('rAch').textContent  = achRate+'%';
+    document.getElementById('rAvg').textContent  = avgT ? 'T'+avgT : '—';
+    document.getElementById('rGF').textContent   = gfRate+'%';
+    document.getElementById('rUF').textContent   = ufRate+'%';
+    document.getElementById('gUnit').textContent = '金'+avgSpent;
+    document.getElementById('gMarch').textContent= '金'+marchGold;
+    document.getElementById('gTotal').textContent= '金'+avgInc;
+    document.getElementById('gMargin').textContent= (avgMargin>=0?'+':'')+'金'+avgMargin;
+    document.getElementById('gMargin').style.color = avgMargin >= 0 ? 'var(--green)' : 'var(--red)';
+    document.getElementById('iHirePlays').textContent = avgHirePlays+'回';
+    document.getElementById('iFBHits').textContent    = avgFBHits+'回';
+    const fbProb    = 1 - Math.pow((POOL_SIZE-1)/POOL_SIZE, candidates);
+    const fbTheory  = Math.round(fbProb*1000)/10;
+    document.getElementById('iFBRate').textContent    = fbHitRate+'%';
+    document.getElementById('iFBRate').parentElement.querySelector('.id').textContent =
+      `プレイ回数あたり（理論値${fbTheory}%・候補${candidates}体）`;
+
+    // Histogram
+    const bkts = Array(tlimit).fill(0);
+    achTurns.forEach(t => { if(t>=1&&t<=tlimit) bkts[t-1]++; });
+    const mx = Math.max(...bkts, 1);
+    const mid = Math.round(tlimit*0.5), late = Math.round(tlimit*0.8);
+    document.getElementById('histBars').innerHTML = bkts.map((b,i)=>{
+      const h = b>0 ? Math.max(Math.round(b/mx*84),2) : 2;
+      const c = i<mid ? '#4a9fd4' : i<late ? '#e8a020' : '#e74c3c';
+      return `<div class="hb" style="height:${h}px;background:${c};opacity:${b>0?1:0.15}" title="T${i+1}: ${b}回"></div>`;
+    }).join('');
+    document.getElementById('histLabels').innerHTML =
+      `<span>T1</span><span>T${Math.round(tlimit/2)}</span><span>T${tlimit}</span>`;
+
+    // Bottleneck
+    const earlyCount = achTurns.filter(t=>t<=Math.round(tlimit*0.6)).length;
+    const earlyRate  = Math.round(earlyCount/trialN*100);
+    const bn         = gfRate > ufRate ? '金不足' : 'ユニット未出現';
+    const bnClass    = gfRate > ufRate ? 'ta' : 'tr';
+
+    const suggestHire = ufRate > 30
+      ? `雇用カードを増やす（初期2枚 or ドラフト優先）か、毎ターンの雇用AP配分を増やすことを推奨。`
+      : gfRate > 30
+      ? `収入強化（兵站将校・市場の早期設置）または任意枠の金コストを下げる設計変更を推奨。`
+      : `現在の設定はバランスが取れています。`;
+
+    const achClass   = achRate>=35 ? 'tg' : achRate>=15 ? 'ta' : 'tr';
+    const earlyClass = earlyRate>=20 ? 'tg' : 'tr';
+
+    document.getElementById('btlContent').innerHTML = `
+      <div style="margin-bottom:8px">
+        主なボトルネック：<span class="tag ${bnClass}">${bn}</span>
+        &nbsp;達成率：<span class="tag ${achClass}">${achRate}%</span>
+        &nbsp;早期達成（T${Math.round(tlimit*0.6)}以内）：<span class="tag ${earlyClass}">${earlyRate}%</span>
+      </div>
+      <div style="margin-bottom:8px;color:var(--text-dim);font-size:0.84rem">${suggestHire}</div>
+      <div style="margin-bottom:6px">
+        <span class="tag tg">達成 ${achRate}%</span>
+        <span class="tag ta">金不足 ${gfRate}%</span>
+        <span class="tag tr">未出現 ${ufRate}%</span>
+      </div>
+      <div style="font-size:0.82rem;color:var(--text-dim)">
+        雇用カード${totalHire}枚・毎ターンAP${hireAP}使用・候補${candidates}体 → 25T通算プレイ回数：平均${avgHirePlays}回<br>
+        槍兵出現確率：理論値${Math.round((1-Math.pow((POOL_SIZE-1)/POOL_SIZE,candidates))*1000)/10}%（候補${candidates}体）/ 実測${fbHitRate}%<br>
+        FB枠${GOALS[selectedGoal].fbA+GOALS[selectedGoal].fbB}体を引くのに必要な期待プレイ回数：約${Math.round((GOALS[selectedGoal].fbA+GOALS[selectedGoal].fbB)/(1-Math.pow((POOL_SIZE-1)/POOL_SIZE,candidates)))}回
+      </div>`;
+
+    document.getElementById('anote').innerHTML =
+      `【仮定値】正規兵プール：8種均等 / 1回の候補数：${candidates}体（候補から槍兵を優先選択） / デッキ${deckSize}枚（初期雇用カード${initHire}枚・ドラフトでT均等に追加→合計${totalHire}枚） /
+毎ターン雇用AP${hireAP}・手札に来る確率は雇用カード枚数÷デッキ枚数×5ドローで近似 /
+任意枠コスト：一律金3 / 進軍：T6・T12・T18に金2支出（収入+1） / 初期所持金：金4<br>
+「金不足」＝候補が出たが購入金が足りなかったケース。「未出現」＝引き当て回数が不足したケース。`;
+
+    document.getElementById('resultArea').style.display = 'block';
+
+    btn.disabled    = false;
+    btn.textContent = '▶ モンテカルロ再実行';
+  }, 30);
+}
+
+// ── Init ──
+updApBar();
+</script>
+</body>
+</html>

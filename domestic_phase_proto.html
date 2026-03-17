@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>内政フェーズ プロトタイプ</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
+
+  :root {
+    --bg-deep: #0a0d12;
+    --bg-panel: #161c28;
+    --gold: #c9a84c;
+    --gold-dim: #7a6030;
+    --red-light: #e74c3c;
+    --blue: #2e6da4;
+    --blue-light: #4a9fd4;
+    --green: #3a8a45;
+    --green-light: #5cba68;
+    --text-main: #d4c4a0;
+    --text-dim: #6a7a90;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg-deep);
+    color: var(--text-main);
+    font-family: 'Crimson Text', serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-bottom: 40px;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.6;
+  }
+
+  header {
+    width: 100%;
+    text-align: center;
+    padding: 18px 20px 10px;
+    position: relative;
+    z-index: 1;
+    border-bottom: 1px solid var(--gold-dim);
+  }
+
+  header h1 {
+    font-family: 'Cinzel', serif;
+    font-size: 1.45rem;
+    font-weight: 900;
+    color: var(--gold);
+    letter-spacing: 0.15em;
+    text-shadow: 0 0 20px rgba(201,168,76,0.4);
+  }
+
+  header p {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    margin-top: 3px;
+    letter-spacing: 0.05em;
+  }
+
+  /* ===== MAIN WRAPPER ===== */
+  .wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px 16px;
+    width: 100%;
+    max-width: 920px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ===== TOP: MAP + CITY INFO ===== */
+  .top-section {
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+  }
+
+  .map-col {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Status bar ABOVE map */
+  .map-status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 14px;
+    background: var(--bg-panel);
+    border: 1px solid var(--gold-dim);
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+  }
+
+  .resources {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+  }
+
+  .res-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-family: 'Cinzel', serif;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+  }
+
+  .res-icon { font-size: 1rem; }
+
+  .res-val {
+    color: var(--gold);
+    font-weight: 700;
+    font-size: 1.05rem;
+    min-width: 22px;
+    text-align: right;
+    transition: color 0.2s;
+  }
+
+  @keyframes resFlash {
+    0%   { color: #fff; }
+    100% { color: var(--gold); }
+  }
+  .res-val.flash { animation: resFlash 0.4s ease; }
+
+  .turn-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .ap-display {
+    font-family: 'Cinzel', serif;
+    font-size: 0.76rem;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .ap-val {
+    color: var(--blue-light);
+    font-weight: 700;
+    font-size: 1rem;
+  }
+
+  .turn-num {
+    font-family: 'Cinzel', serif;
+    font-size: 0.76rem;
+    color: var(--gold-dim);
+    letter-spacing: 0.08em;
+  }
+
+  #hexCanvas {
+    display: block;
+    border: 1px solid var(--gold-dim);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    filter: drop-shadow(0 0 16px rgba(201,168,76,0.06));
+  }
+
+  /* Hex select mode notice (below canvas) */
+  .hex-select-notice {
+    display: none;
+    background: rgba(58,138,69,0.15);
+    border: 1px solid var(--green);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    padding: 7px 12px;
+    font-family: 'Cinzel', serif;
+    font-size: 0.72rem;
+    color: var(--green-light);
+    letter-spacing: 0.05em;
+    text-align: center;
+  }
+
+  .hex-select-notice.visible { display: block; }
+
+  /* ===== CITY INFO PANEL ===== */
+  .city-info-panel {
+    flex: 1;
+    min-height: 388px;
+    background: var(--bg-panel);
+    border: 1px solid var(--gold-dim);
+    border-radius: 6px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .city-info-panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  }
+
+  .panel-label {
+    font-family: 'Cinzel', serif;
+    font-size: 0.58rem;
+    letter-spacing: 0.18em;
+    color: var(--gold-dim);
+    text-transform: uppercase;
+    margin-bottom: 3px;
+  }
+
+  .city-default-msg {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+    font-style: italic;
+    font-size: 0.83rem;
+    text-align: center;
+    line-height: 1.8;
+  }
+
+  #cityDetails {
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .city-hex-name {
+    font-family: 'Cinzel', serif;
+    font-size: 1.0rem;
+    font-weight: 700;
+    color: var(--gold);
+  }
+
+  .city-owner-badge {
+    display: inline-block;
+    font-family: 'Cinzel', serif;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    padding: 2px 8px;
+    border-radius: 3px;
+    margin-top: 3px;
+  }
+
+  .city-owner-badge.player {
+    background: rgba(46,109,164,0.25);
+    border: 1px solid var(--blue);
+    color: var(--blue-light);
+  }
+
+  .city-owner-badge.cpu {
+    background: rgba(231,76,60,0.12);
+    border: 1px solid #8a3a2c;
+    color: #e08070;
+  }
+
+  .city-owner-badge.boss {
+    background: rgba(150,30,30,0.2);
+    border: 1px solid #c0392b;
+    color: #ff8070;
+  }
+
+  .city-level-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .city-level-dots {
+    display: flex;
+    gap: 4px;
+  }
+
+  .level-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1px solid var(--gold-dim);
+  }
+  .level-dot.filled {
+    background: var(--gold);
+    border-color: var(--gold);
+    box-shadow: 0 0 5px rgba(201,168,76,0.5);
+  }
+  .level-dot.empty  { background: rgba(100,100,100,0.1); }
+
+  .city-section {
+    background: rgba(0,0,0,0.18);
+    border: 1px solid rgba(201,168,76,0.08);
+    border-radius: 4px;
+    padding: 8px 10px;
+  }
+
+  .city-section .panel-label { margin-bottom: 5px; }
+
+  .info-row {
+    font-size: 0.77rem;
+    color: var(--text-dim);
+    padding: 2px 0;
+    line-height: 1.4;
+  }
+
+  .info-row.player-unit { color: var(--blue-light); }
+  .info-row.fog         { font-style: italic; }
+
+  /* Log area */
+  .log-area {
+    flex: 1;
+    overflow-y: auto;
+    font-size: 0.75rem;
+    line-height: 1.55;
+    color: var(--text-dim);
+    min-height: 50px;
+    max-height: 110px;
+  }
+  .log-area::-webkit-scrollbar { width: 3px; }
+  .log-area::-webkit-scrollbar-thumb { background: var(--gold-dim); border-radius: 2px; }
+  .log-entry { padding: 0; }
+  .log-entry.player-log { color: var(--blue-light); }
+  .log-entry.system-log { color: var(--gold); }
+  .log-entry.error-log  { color: var(--red-light); }
+
+  /* ===== CARDS SECTION ===== */
+  .cards-section {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    min-height: 150px;
+  }
+
+  /* ===== PILE AREAS (Deck / Discard) ===== */
+  .pile-area {
+    flex-shrink: 0;
+    width: 88px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .pile-label {
+    font-family: 'Cinzel', serif;
+    font-size: 0.6rem;
+    letter-spacing: 0.15em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+
+  .pile-wrap {
+    position: relative;
+    width: 76px;
+    height: 112px;
+  }
+
+  /* Deck shadow layers */
+  .deck-sh2 {
+    position: absolute;
+    top: 4px; left: 4px;
+    width: 68px; height: 106px;
+    background: #131e32;
+    border: 1px solid var(--gold-dim);
+    border-radius: 5px;
+    opacity: 0.6;
+  }
+
+  .deck-sh1 {
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 68px; height: 106px;
+    background: #161f34;
+    border: 1px solid var(--gold-dim);
+    border-radius: 5px;
+    opacity: 0.8;
+  }
+
+  .pile-card {
+    position: absolute;
+    top: 0; left: 0;
+    width: 68px; height: 106px;
+    background: linear-gradient(145deg, #1a2840, #0e1625);
+    border: 1px solid var(--gold-dim);
+    border-radius: 5px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+  }
+
+  .pile-card.discard-face {
+    background: linear-gradient(145deg, #241414, #140a0a);
+    border-color: rgba(120,60,60,0.5);
+  }
+
+  .pile-icon { font-size: 1.3rem; opacity: 0.4; }
+
+  .pile-count {
+    font-family: 'Cinzel', serif;
+    font-size: 0.78rem;
+    color: var(--gold-dim);
+  }
+
+  .pile-top-name {
+    font-size: 0.55rem;
+    font-family: 'Cinzel', serif;
+    color: rgba(180,130,110,0.45);
+    text-align: center;
+    padding: 0 4px;
+    line-height: 1.3;
+  }
+
+  /* ===== END TURN BUTTON ===== */
+  .btn-turn-end {
+    width: 84px;
+    padding: 9px 5px;
+    background: linear-gradient(135deg, #1a3050, #0e1e35);
+    border: 1px solid var(--blue);
+    border-radius: 5px;
+    color: var(--blue-light);
+    font-family: 'Cinzel', serif;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+    line-height: 1.5;
+  }
+
+  .btn-turn-end:hover {
+    border-color: var(--blue-light);
+    box-shadow: 0 0 14px rgba(74,159,212,0.3);
+    transform: translateY(-1px);
+  }
+
+  /* ===== HAND AREA ===== */
+  .hand-area {
+    flex: 1;
+    display: flex;
+    gap: 6px;
+    align-items: flex-end;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    padding-top: 4px;
+  }
+
+  .hand-area::-webkit-scrollbar { height: 4px; }
+  .hand-area::-webkit-scrollbar-thumb { background: var(--gold-dim); border-radius: 2px; }
+
+  /* ===== CARD STYLES ===== */
+  .card {
+    flex-shrink: 0;
+    width: 84px;
+    height: 122px;
+    background: linear-gradient(155deg, #1e2a42, #131826);
+    border: 1.5px solid var(--gold-dim);
+    border-radius: 6px;
+    padding: 7px 6px 5px;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    user-select: none;
+  }
+
+  .card:hover:not(.unplayable):not(.awaiting-hex) {
+    border-color: rgba(201,168,76,0.6);
+    transform: translateY(-6px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+  }
+
+  .card.selected {
+    border-color: var(--gold);
+    border-width: 2px;
+    transform: translateY(-10px);
+    box-shadow: 0 0 18px rgba(201,168,76,0.4), 0 10px 28px rgba(0,0,0,0.65);
+    background: linear-gradient(155deg, #28340f, #191f08);
+  }
+
+  .card.awaiting-hex {
+    border-color: var(--green-light);
+    border-width: 2px;
+    transform: translateY(-6px);
+    animation: awaiting 1.2s ease-in-out infinite;
+  }
+
+  @keyframes awaiting {
+    0%,100% { box-shadow: 0 0 10px rgba(92,186,104,0.25); }
+    50%     { box-shadow: 0 0 22px rgba(92,186,104,0.7); }
+  }
+
+  .card.unplayable {
+    opacity: 0.38;
+    cursor: not-allowed;
+  }
+
+  .card-cost {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 19px;
+    height: 19px;
+    border-radius: 50%;
+    background: rgba(201,168,76,0.12);
+    border: 1px solid var(--gold-dim);
+    font-family: 'Cinzel', serif;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--gold);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .card-cat-bar {
+    height: 2.5px;
+    border-radius: 2px;
+    margin-bottom: 5px;
+    margin-top: 1px;
+  }
+  .cat-resource { background: linear-gradient(90deg, #c9a84c, #6a5020); }
+  .cat-hire     { background: linear-gradient(90deg, #2e6da4, #1a3a58); }
+  .cat-strategy { background: linear-gradient(90deg, #6a38a0, #3a1860); }
+  .cat-develop  { background: linear-gradient(90deg, #3a8a45, #1a4520); }
+
+  .card-name {
+    font-family: 'Cinzel', serif;
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: var(--text-main);
+    line-height: 1.3;
+    padding-right: 18px;
+    margin-bottom: 4px;
+  }
+
+  .card-desc {
+    font-size: 0.64rem;
+    color: var(--text-dim);
+    line-height: 1.45;
+    flex: 1;
+  }
+
+  .card-hint {
+    font-size: 0.56rem;
+    color: rgba(201,168,76,0.4);
+    text-align: center;
+    margin-top: 3px;
+    font-style: italic;
+    transition: color 0.15s;
+  }
+
+  .card.selected .card-hint { color: rgba(92,186,104,0.75); }
+  .card.awaiting-hex .card-hint { color: rgba(92,186,104,0.9); }
+
+  /* ===== TOOLTIP ===== */
+  .hex-tooltip {
+    position: fixed;
+    background: var(--bg-panel);
+    border: 1px solid var(--gold-dim);
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 0.76rem;
+    color: var(--gold);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 100;
+    font-family: 'Cinzel', serif;
+  }
+
+  .hex-tooltip.visible { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🏰 内政フェーズ プロトタイプ</h1>
+  <p>軍人勢力 — ギミック検証用 / 基本カード：2クリックでプレイ ／ 都市整備：クリック後HEX選択</p>
+</header>
+
+<div class="wrapper">
+
+  <!-- ===== TOP: MAP + CITY INFO ===== -->
+  <div class="top-section">
+
+    <!-- MAP COLUMN -->
+    <div class="map-col">
+      <div class="map-status-bar" id="mapStatusBar">
+        <div class="resources">
+          <span class="res-item">
+            <span class="res-icon">💰</span>
+            <span>金</span>
+            <span class="res-val" id="goldVal">5</span>
+          </span>
+          <span class="res-item">
+            <span class="res-icon">⚜</span>
+            <span>権威</span>
+            <span class="res-val" id="authorityVal">1</span>
+          </span>
+        </div>
+        <div class="turn-info">
+          <span class="ap-display">
+            AP <span class="ap-val" id="apCur">3</span>/<span id="apMax">3</span>
+          </span>
+          <span class="turn-num" id="turnNum">ターン 1</span>
+        </div>
+      </div>
+
+      <canvas id="hexCanvas" width="548" height="360"></canvas>
+
+      <div class="hex-select-notice" id="hexSelectNotice">
+        🏰 都市整備 — 自軍領地のHEXをクリック（もう一度カードをクリックでキャンセル）
+      </div>
+    </div>
+
+    <!-- CITY INFO PANEL -->
+    <div class="city-info-panel">
+      <div class="panel-label">都市情報</div>
+
+      <div class="city-default-msg" id="cityDefaultMsg">
+        HEXにマウスを<br>合わせると<br>都市情報を表示します
+      </div>
+
+      <div id="cityDetails">
+        <div>
+          <div class="city-hex-name" id="cityHexName">—</div>
+          <div class="city-owner-badge player" id="cityOwnerBadge">—</div>
+        </div>
+        <div class="city-level-row">
+          <span class="panel-label" style="margin:0;">都市Lv</span>
+          <div class="city-level-dots" id="cityLevelDots"></div>
+        </div>
+        <div class="city-section">
+          <div class="panel-label">施設</div>
+          <div id="facilityList"></div>
+        </div>
+        <div class="city-section">
+          <div class="panel-label">駐留ユニット</div>
+          <div id="unitList"></div>
+        </div>
+      </div>
+
+      <!-- Log -->
+      <div style="margin-top:auto;">
+        <div class="panel-label">行動ログ</div>
+        <div class="log-area" id="logArea"></div>
+      </div>
+    </div>
+
+  </div><!-- end top-section -->
+
+  <!-- ===== BOTTOM: CARDS ===== -->
+  <div class="cards-section">
+
+    <!-- Deck -->
+    <div class="pile-area">
+      <div class="pile-label">山札</div>
+      <div class="pile-wrap" id="deckWrap">
+        <div class="deck-sh2"></div>
+        <div class="deck-sh1"></div>
+        <div class="pile-card">
+          <div class="pile-icon">🂠</div>
+          <div class="pile-count" id="deckCount">5</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hand -->
+    <div class="hand-area" id="handArea"></div>
+
+    <!-- Discard + End Turn -->
+    <div class="pile-area" style="width:92px;">
+      <div class="pile-label">捨て札</div>
+      <div class="pile-wrap">
+        <div class="pile-card discard-face" id="discardFace">
+          <div class="pile-icon">🃟</div>
+          <div class="pile-count" id="discardCount">0</div>
+        </div>
+      </div>
+      <button class="btn-turn-end" id="btnTurnEnd" onclick="endTurn()">
+        内政<br>ターンエンド
+      </button>
+    </div>
+
+  </div><!-- end cards-section -->
+
+</div><!-- end wrapper -->
+
+<div class="hex-tooltip" id="hexTooltip"></div>
+
+<script>
+// ============================================================
+//  HEX GRID
+// ============================================================
+const HEX_SIZE = 52;
+const CW = 548, CH = 360;
+const HR   = Math.sqrt(3) * HEX_SIZE;
+const VR   = 1.5 * HEX_SIZE;
+const HALF = HR / 2;
+const OX   = (CW - 3 * HR) / 2 + 4;  // left offset (center 4 cols, nudge right)
+const ROW_Y = [88, 88 + VR, 88 + 2 * VR];
+
+// Pointy-top offset hex grid: 3 rows × 4 cols staggered
+const hexDefs = [
+  { id:1,  cx: OX + HALF + 0*HR, cy: ROW_Y[0] },
+  { id:2,  cx: OX + HALF + 1*HR, cy: ROW_Y[0] },
+  { id:3,  cx: OX + HALF + 2*HR, cy: ROW_Y[0] },
+  { id:4,  cx: OX + 0*HR,        cy: ROW_Y[1] },
+  { id:5,  cx: OX + 1*HR,        cy: ROW_Y[1] },
+  { id:6,  cx: OX + 2*HR,        cy: ROW_Y[1] },
+  { id:7,  cx: OX + 3*HR,        cy: ROW_Y[1] },
+  { id:8,  cx: OX + HALF + 0*HR, cy: ROW_Y[2] },
+  { id:9,  cx: OX + HALF + 1*HR, cy: ROW_Y[2] },
+  { id:10, cx: OX + HALF + 2*HR, cy: ROW_Y[2] },
+];
+
+function hexById(id) { return hexDefs.find(h => h.id === id); }
+
+// ============================================================
+//  GAME STATE
+// ============================================================
+let gold = 5, authority = 1;
+let actionPoints = 3;
+const maxAP = 3;
+let turnCount = 1;
+
+let hoveredHex = null;
+let selectedCardId = null;
+let waitingHex = false;      // 都市整備: awaiting hex click
+let pendingCardId = null;    // card waiting for hex selection
+
+// Cities: HEX 4 (player Lv2), HEX 7 (CPU boss Lv2), rest CPU Lv1
+const cities = {
+  1:  { level:1, owner:'cpu',    facilities:[], name:'北の砦' },
+  2:  { level:1, owner:'cpu',    facilities:[], name:'峠の村' },
+  3:  { level:1, owner:'cpu',    facilities:[], name:'東の草原' },
+  4:  { level:2, owner:'player', facilities:[], name:'王城' },
+  5:  { level:1, owner:'cpu',    facilities:[], name:'中央平原' },
+  6:  { level:1, owner:'cpu',    facilities:[], name:'交差路' },
+  7:  { level:2, owner:'cpu',    facilities:[], name:'敵本城', boss:true },
+  8:  { level:1, owner:'cpu',    facilities:[], name:'南の丘' },
+  9:  { level:1, owner:'cpu',    facilities:[], name:'南東の森' },
+  10: { level:1, owner:'cpu',    facilities:[], name:'海岸の港' },
+};
+
+// Player units on HEX 4
+let playerUnits = [
+  { id:'P1', name:'槍兵',   position:'前衛', hp:14, maxHp:14, atk:3, morale:6, hex:4 },
+  { id:'P2', name:'弓兵',   position:'後衛', hp:10, maxHp:10, atk:4, morale:5, hex:4 },
+];
+
+// CPU units (fog of war — only count shown to player)
+let cpuUnits = [
+  { id:'C1', hex:2,  count:2 },
+  { id:'C2', hex:3,  count:2 },
+  { id:'C3', hex:7,  count:3 },
+  { id:'C4', hex:9,  count:1 },
+];
+
+// ============================================================
+//  CARD DEFINITIONS
+// ============================================================
+const CAT_CLASS = {
+  resource: 'cat-resource',
+  hire:     'cat-hire',
+  strategy: 'cat-strategy',
+  develop:  'cat-develop',
+};
+
+const cardDefs = {
+  gold: {
+    key:'gold', name:'金を得る', cost:1, cat:'resource',
+    desc:'金 +2',
+    play(id) {
+      gold += 2;
+      addLog('「金を得る」→ 金 +2', 'player-log');
+      flashRes('goldVal');
+      finalizePlay(id);
+    }
+  },
+  hire_regular: {
+    key:'hire_regular', name:'正規兵の雇用', cost:1, cat:'hire',
+    desc:'候補1体から選んで雇用',
+    play(id) {
+      addLog('「正規兵の雇用」（雇用UIは未実装）', 'system-log');
+      finalizePlay(id);
+    }
+  },
+  hire_merc: {
+    key:'hire_merc', name:'傭兵の雇用', cost:1, cat:'hire',
+    desc:'候補3体から選んで雇用',
+    play(id) {
+      addLog('「傭兵の雇用」（雇用UIは未実装）', 'system-log');
+      finalizePlay(id);
+    }
+  },
+  strategy: {
+    key:'strategy', name:'調略', cost:1, cat:'strategy',
+    desc:'候補3枚から戦闘カードを1枚獲得',
+    play(id) {
+      addLog('「調略」（カード獲得UIは未実装）', 'system-log');
+      finalizePlay(id);
+    }
+  },
+  city_dev: {
+    key:'city_dev', name:'都市整備', cost:2, cat:'develop',
+    desc:'対象HEXの都市レベルを+1（最大Lv4）',
+    play(id) {
+      // Enter hex-selection mode
+      waitingHex = true;
+      pendingCardId = id;
+      selectedCardId = id;
+      document.getElementById('hexSelectNotice').classList.add('visible');
+      addLog('「都市整備」選択中 → 自軍HEXをクリック', 'system-log');
+      renderHand();
+      render();
+    }
+  },
+};
+
+// ============================================================
+//  DECK / HAND / DISCARD
+// ============================================================
+let cardIdSeq = 0;
+function makeCard(key) {
+  return { id:`c${cardIdSeq++}`, ...cardDefs[key] };
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length-1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
+
+// Turn-1 exception: 6 basic cards + 1 都市整備 = 7 cards
+let hand = [
+  makeCard('gold'), makeCard('gold'), makeCard('gold'),
+  makeCard('hire_regular'), makeCard('hire_merc'), makeCard('strategy'),
+  makeCard('city_dev'),
+];
+
+// Draw pile: 5 random basic cards
+const basicPool = ['gold','gold','gold','hire_regular','hire_merc','strategy'];
+let deck = shuffle([...basicPool]).slice(0,5).map(k => makeCard(k));
+let discard = [];
+
+// ============================================================
+//  CARD PLAY LOGIC
+// ============================================================
+function canPlay(card) {
+  return actionPoints >= card.cost && !waitingHex;
+}
+
+/** Common finalizer: deduct AP, move card hand→discard */
+function finalizePlay(cardId) {
+  const idx = hand.findIndex(c => c.id === cardId);
+  if (idx === -1) return;
+  actionPoints -= hand[idx].cost;
+  discard.push(hand[idx]);
+  hand.splice(idx, 1);
+  selectedCardId = null;
+  updateUI();
+  renderHand();
+  render();
+}
+
+function onCardClick(cardId) {
+  // In hex-select mode: only clicking the pending card cancels
+  if (waitingHex) {
+    if (cardId === pendingCardId) cancelHexSelect();
+    return;
+  }
+
+  const card = hand.find(c => c.id === cardId);
+  if (!card) return;
+
+  if (!canPlay(card)) {
+    addLog(`行動ポイント不足（必要: ${card.cost}、残り: ${actionPoints}）`, 'error-log');
+    return;
+  }
+
+  if (selectedCardId === cardId) {
+    // 2nd click → play
+    selectedCardId = null;
+    card.play(cardId);
+  } else {
+    // 1st click → select
+    selectedCardId = cardId;
+    renderHand();
+  }
+}
+
+function cancelHexSelect() {
+  waitingHex = false;
+  pendingCardId = null;
+  selectedCardId = null;
+  document.getElementById('hexSelectNotice').classList.remove('visible');
+  addLog('都市整備をキャンセル', 'system-log');
+  renderHand();
+  render();
+}
+
+// ============================================================
+//  HEX SELECTION (都市整備)
+// ============================================================
+function onHexClickCityDev(hexId) {
+  const city = cities[hexId];
+  if (city.owner !== 'player') {
+    addLog(`HEX ${hexId} は自軍領地ではありません`, 'error-log');
+    return;
+  }
+  if (city.level >= 4) {
+    addLog(`${city.name}（HEX ${hexId}）は既に最大レベル（Lv4）です`, 'error-log');
+    return;
+  }
+
+  const prev = city.level;
+  city.level++;
+  let bonusMsg = '';
+  if (city.level === 2) {
+    bonusMsg = ' ✦ ランダム内政カードを獲得（未実装）';
+  } else if (city.level === 4) {
+    authority++;
+    flashRes('authorityVal');
+    bonusMsg = ' ✦ 権威 +1';
+  }
+  addLog(`${city.name}（HEX ${hexId}）Lv${prev} → Lv${city.level}${bonusMsg}`, 'player-log');
+
+  const cid = pendingCardId;
+  waitingHex = false;
+  pendingCardId = null;
+  document.getElementById('hexSelectNotice').classList.remove('visible');
+
+  finalizePlay(cid);
+  updateCityPanel(hexId);
+}
+
+// ============================================================
+//  TURN END
+// ============================================================
+function endTurn() {
+  if (waitingHex) cancelHexSelect();
+
+  // All hand → discard
+  discard.push(...hand);
+  hand = [];
+
+  // If deck < 4 and discard has cards, reshuffle
+  if (deck.length < 4 && discard.length > 0) {
+    deck.push(...shuffle(discard));
+    discard = [];
+    addLog('山札が切れたため捨て札をシャッフルして補充', 'system-log');
+  }
+
+  const draw = Math.min(4, deck.length);
+  for (let i = 0; i < draw; i++) hand.push(deck.pop());
+
+  actionPoints = maxAP;
+  selectedCardId = null;
+  turnCount++;
+
+  addLog(`── ターン ${turnCount} 開始 ──`, 'system-log');
+  updateUI();
+  renderHand();
+  render();
+}
+
+// ============================================================
+//  CANVAS RENDERING
+// ============================================================
+const canvas  = document.getElementById('hexCanvas');
+const ctx     = canvas.getContext('2d');
+const tooltip = document.getElementById('hexTooltip');
+
+function drawHexPath(cx, cy, size) {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = (Math.PI / 3) * i - Math.PI / 6;
+    const px = cx + size * Math.cos(a);
+    const py = cy + size * Math.sin(a);
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+
+function render() {
+  ctx.clearRect(0, 0, CW, CH);
+
+  // Background
+  const bg = ctx.createRadialGradient(CW/2, CH/2, 40, CW/2, CH/2, 320);
+  bg.addColorStop(0, '#131926');
+  bg.addColorStop(1, '#0a0d12');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, CW, CH);
+
+  hexDefs.forEach(h => {
+    const city     = cities[h.id];
+    const isPlayer = city.owner === 'player';
+    const isHov    = hoveredHex === h.id;
+    const isBoss   = !!city.boss;
+
+    // Fill/stroke based on owner + state
+    let fill, stroke, sw;
+
+    if (waitingHex) {
+      const selectable = isPlayer && city.level < 4;
+      if (selectable) {
+        fill   = isHov ? '#163024' : '#0e201a';
+        stroke = isHov ? '#5cba68' : '#3a8a45';
+        sw     = isHov ? 2.5 : 2;
+      } else {
+        fill   = '#101010';
+        stroke = '#2a2a2a';
+        sw     = 1;
+      }
+    } else if (isPlayer) {
+      fill   = isHov ? '#1a2d4a' : '#111e32';
+      stroke = isHov ? '#4a9fd4' : '#2a5080';
+      sw     = isHov ? 2 : 1.5;
+    } else if (isBoss) {
+      fill   = isHov ? '#2a0e0e' : '#1e0808';
+      stroke = isHov ? '#c05040' : '#8a3020';
+      sw     = isHov ? 2.5 : 2;
+    } else {
+      fill   = isHov ? '#231212' : '#160a0a';
+      stroke = isHov ? '#a05040' : '#5a2828';
+      sw     = isHov ? 2 : 1.5;
+    }
+
+    // Draw hex body
+    drawHexPath(h.cx, h.cy, HEX_SIZE - 2);
+    ctx.fillStyle = fill; ctx.fill();
+    ctx.strokeStyle = stroke; ctx.lineWidth = sw; ctx.stroke();
+
+    // Inner subtle ring
+    drawHexPath(h.cx, h.cy, HEX_SIZE - 7);
+    ctx.strokeStyle = 'rgba(255,255,255,0.025)';
+    ctx.lineWidth = 1; ctx.stroke();
+
+    // HEX number (top-center)
+    ctx.fillStyle = isPlayer ? '#3a5a7a' : '#5a3a3a';
+    ctx.font = 'bold 10px Cinzel, serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(h.id, h.cx, h.cy - HEX_SIZE + 9);
+
+    // City level dots (4 dots below number)
+    for (let i = 0; i < 4; i++) {
+      const dx = h.cx - 6 + i * 4.5;
+      const dy = h.cy - HEX_SIZE + 22;
+      ctx.beginPath();
+      ctx.arc(dx, dy, 2.5, 0, Math.PI * 2);
+      if (i < city.level) {
+        ctx.fillStyle = isPlayer ? '#c9a84c' : (isBoss ? '#c05040' : '#a04040');
+      } else {
+        ctx.fillStyle = 'rgba(100,100,100,0.15)';
+      }
+      ctx.fill();
+    }
+
+    // Center icon
+    ctx.font = '15px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    if (isBoss) {
+      ctx.fillStyle = '#c05040';
+      ctx.fillText('☠', h.cx, h.cy + 2);
+    } else if (isPlayer) {
+      ctx.fillStyle = '#4a9fd4';
+      ctx.fillText('⚑', h.cx, h.cy + 2);
+    } else {
+      ctx.fillStyle = '#705050';
+      ctx.fillText('⚐', h.cx, h.cy + 2);
+    }
+
+    // Selectable pulse ring in hex-select mode
+    if (waitingHex && isPlayer && city.level < 4) {
+      drawHexPath(h.cx, h.cy, HEX_SIZE - 4);
+      ctx.strokeStyle = isHov ? 'rgba(92,186,104,0.85)' : 'rgba(58,138,69,0.45)';
+      ctx.lineWidth = 2.5; ctx.stroke();
+    }
+
+    // Boss glow
+    if (isBoss) {
+      ctx.shadowColor = 'rgba(200,60,60,0.4)';
+      ctx.shadowBlur  = isHov ? 20 : 10;
+      drawHexPath(h.cx, h.cy, HEX_SIZE - 2);
+      ctx.strokeStyle = 'transparent'; ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+  });
+
+  // Draw units
+  hexDefs.forEach(h => {
+    const pU = playerUnits.filter(u => u.hex === h.id);
+    const cU = cpuUnits.filter(u => u.hex === h.id);
+    drawUnits(h, pU, cU);
+  });
+}
+
+function drawUnits(h, pUnits, cUnits) {
+  const all = [
+    ...pUnits.map(u => ({ ...u, isPlayer: true })),
+    ...cUnits.map(u => ({ ...u, isPlayer: false, name: '敵軍' })),
+  ];
+  if (!all.length) return;
+
+  all.forEach((u, idx) => {
+    const n = all.length;
+    const ox = n === 1 ? 0 : idx === 0 ? -14 : 14;
+    const cx = h.cx + ox;
+    const cy = h.cy;
+    const col  = u.isPlayer ? '#4a9fd4' : '#e74c3c';
+    const glow = u.isPlayer ? 'rgba(74,159,212,0.6)' : 'rgba(231,76,60,0.6)';
+    const icon = u.isPlayer ? '⚔' : '☠';
+
+    ctx.shadowColor = glow;
+    ctx.shadowBlur  = 13;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 14, 0, Math.PI * 2);
+    ctx.fillStyle = u.isPlayer ? 'rgba(12,36,62,0.95)' : 'rgba(55,12,12,0.95)';
+    ctx.fill();
+    ctx.strokeStyle = col;
+    ctx.lineWidth   = 1.8;
+    ctx.stroke();
+    ctx.shadowBlur  = 0;
+
+    ctx.fillStyle = col;
+    ctx.font = '10px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(icon, cx, cy);
+  });
+}
+
+// ============================================================
+//  MOUSE / KEYBOARD EVENTS
+// ============================================================
+function getHexAt(mx, my) {
+  for (const h of hexDefs) {
+    const dx = mx - h.cx, dy = my - h.cy;
+    if (Math.sqrt(dx*dx + dy*dy) < HEX_SIZE - 4) return h.id;
+  }
+  return null;
+}
+
+canvas.addEventListener('mousemove', e => {
+  const r   = canvas.getBoundingClientRect();
+  const hid = getHexAt(e.clientX - r.left, e.clientY - r.top);
+
+  if (hid !== null) {
+    const city = cities[hid];
+    tooltip.textContent = `HEX ${hid} — ${city.name}`;
+    tooltip.style.left  = (e.clientX + 14) + 'px';
+    tooltip.style.top   = (e.clientY - 28) + 'px';
+    tooltip.classList.add('visible');
+
+    if (waitingHex) {
+      canvas.style.cursor = (city.owner === 'player' && city.level < 4) ? 'pointer' : 'not-allowed';
+    } else {
+      canvas.style.cursor = 'default';
+    }
+  } else {
+    tooltip.classList.remove('visible');
+    canvas.style.cursor = 'default';
+  }
+
+  if (hid !== hoveredHex) {
+    hoveredHex = hid;
+    render();
+    updateCityPanel(hid);
+  }
+});
+
+canvas.addEventListener('mouseleave', () => {
+  tooltip.classList.remove('visible');
+  hoveredHex = null;
+  render();
+  updateCityPanel(null);
+});
+
+canvas.addEventListener('click', e => {
+  const r   = canvas.getBoundingClientRect();
+  const hid = getHexAt(e.clientX - r.left, e.clientY - r.top);
+  if (hid !== null && waitingHex) onHexClickCityDev(hid);
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && waitingHex) cancelHexSelect();
+});
+
+// ============================================================
+//  CITY INFO PANEL
+// ============================================================
+function updateCityPanel(hexId) {
+  const defaultMsg = document.getElementById('cityDefaultMsg');
+  const details    = document.getElementById('cityDetails');
+
+  if (hexId === null) {
+    defaultMsg.style.display = 'flex';
+    details.style.display    = 'none';
+    return;
+  }
+
+  defaultMsg.style.display = 'none';
+  details.style.display    = 'flex';
+
+  const city = cities[hexId];
+  document.getElementById('cityHexName').textContent = `HEX ${hexId} — ${city.name}`;
+
+  const badge = document.getElementById('cityOwnerBadge');
+  if (city.owner === 'player') {
+    badge.textContent = 'プレイヤー領地';
+    badge.className   = 'city-owner-badge player';
+  } else if (city.boss) {
+    badge.textContent = '敵本城（最終目標）';
+    badge.className   = 'city-owner-badge boss';
+  } else {
+    badge.textContent = 'CPU領地';
+    badge.className   = 'city-owner-badge cpu';
+  }
+
+  // Level dots
+  const dotsEl = document.getElementById('cityLevelDots');
+  dotsEl.innerHTML = '';
+  for (let i = 1; i <= 4; i++) {
+    const d = document.createElement('div');
+    d.className = 'level-dot ' + (i <= city.level ? 'filled' : 'empty');
+    dotsEl.appendChild(d);
+  }
+
+  // Facilities
+  const facEl = document.getElementById('facilityList');
+  facEl.innerHTML = city.facilities.length
+    ? city.facilities.map(f => `<div class="info-row">${f}</div>`).join('')
+    : '<div class="info-row" style="font-style:italic;">施設なし</div>';
+
+  // Units
+  const unitEl = document.getElementById('unitList');
+  unitEl.innerHTML = '';
+
+  if (city.owner === 'player') {
+    const units = playerUnits.filter(u => u.hex === hexId);
+    if (!units.length) {
+      unitEl.innerHTML = '<div class="info-row" style="font-style:italic;">駐留なし</div>';
+    } else {
+      units.forEach(u => {
+        const d = document.createElement('div');
+        d.className = 'info-row player-unit';
+        d.textContent = `⚔ ${u.name}（${u.position}） HP:${u.hp}/${u.maxHp} 士気:${u.morale}`;
+        unitEl.appendChild(d);
+      });
+    }
+  } else {
+    // Fog of war: approximate
+    const cu = cpuUnits.filter(u => u.hex === hexId);
+    if (!cu.length) {
+      unitEl.innerHTML = '<div class="info-row" style="font-style:italic;">駐留なし</div>';
+    } else {
+      const total = cu.reduce((s, u) => s + u.count, 0);
+      const scale = total <= 1 ? '少数' : total <= 3 ? '中規模' : '大規模';
+      unitEl.innerHTML = `<div class="info-row fog">🌫 ${scale}の敵部隊が駐留中（詳細不明）</div>`;
+    }
+  }
+}
+
+// ============================================================
+//  HAND RENDERING
+// ============================================================
+function renderHand() {
+  const area = document.getElementById('handArea');
+  area.innerHTML = '';
+
+  hand.forEach(card => {
+    const isAwait  = waitingHex && card.id === pendingCardId;
+    const isSel    = !waitingHex && selectedCardId === card.id;
+    const playable = canPlay(card);
+
+    const div = document.createElement('div');
+    let cls = 'card';
+    if (isAwait)       cls += ' awaiting-hex';
+    else if (isSel)    cls += ' selected';
+    else if (!playable) cls += ' unplayable';
+    div.className = cls;
+
+    let hint;
+    if (isAwait)    hint = 'カードをクリックでキャンセル';
+    else if (isSel) hint = 'もう一度クリックでプレイ';
+    else            hint = 'クリックで選択';
+
+    div.innerHTML = `
+      <div class="card-cost">${card.cost}</div>
+      <div class="card-name">${card.name}</div>
+      <div class="card-cat-bar ${CAT_CLASS[card.cat]}"></div>
+      <div class="card-desc">${card.desc}</div>
+      <div class="card-hint">${hint}</div>
+    `;
+
+    div.addEventListener('click', () => onCardClick(card.id));
+    area.appendChild(div);
+  });
+
+  // Update pile counts
+  document.getElementById('deckCount').textContent    = deck.length;
+  document.getElementById('discardCount').textContent = discard.length;
+
+  // Deck opacity when empty
+  document.getElementById('deckWrap').style.opacity = deck.length ? '1' : '0.25';
+
+  // Discard face top card
+  const discardFace = document.getElementById('discardFace');
+  if (discard.length > 0) {
+    const top = discard[discard.length - 1];
+    discardFace.innerHTML = `
+      <div class="pile-top-name">${top.name}</div>
+      <div class="pile-count">${discard.length}</div>
+    `;
+  } else {
+    discardFace.innerHTML = `
+      <div class="pile-icon">🃟</div>
+      <div class="pile-count">0</div>
+    `;
+  }
+}
+
+// ============================================================
+//  UI UPDATE
+// ============================================================
+function updateUI() {
+  document.getElementById('goldVal').textContent      = gold;
+  document.getElementById('authorityVal').textContent = authority;
+  document.getElementById('apCur').textContent        = actionPoints;
+  document.getElementById('apMax').textContent        = maxAP;
+  document.getElementById('turnNum').textContent      = `ターン ${turnCount}`;
+}
+
+function flashRes(elId) {
+  const el = document.getElementById(elId);
+  el.classList.remove('flash');
+  void el.offsetWidth; // reflow
+  el.classList.add('flash');
+}
+
+// ============================================================
+//  LOG
+// ============================================================
+function addLog(text, cls) {
+  const area = document.getElementById('logArea');
+  const el   = document.createElement('div');
+  el.className  = 'log-entry ' + (cls || '');
+  el.textContent = text;
+  area.appendChild(el);
+  area.scrollTop = area.scrollHeight;
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+addLog('── ターン 1 開始（初期例外：手札7枚）──', 'system-log');
+addLog('基本カード：2クリックでプレイ', 'system-log');
+addLog('都市整備：クリック後に自軍HEXを選択', 'system-log');
+updateUI();
+renderHand();
+render();
+updateCityPanel(null);
+</script>
+</body>
+</html>

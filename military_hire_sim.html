@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>軍人雇用シミュレーター</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;800&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-deep:#0a0c14;--bg-mid:#111520;--bg-card:#161a28;--bg-raised:#1c2135;
+    --gold:#c9a84c;--gold-light:#e8c96e;--gold-dim:#7a6130;
+    --crimson:#8b1a1a;--crimson-light:#c0392b;
+    --steel:#5a6a8a;--steel-light:#8fa0c0;
+    --green:#4a8c30;--green-light:#7abc50;
+    --text-primary:#e8dcc8;--text-secondary:#9a8f7a;--text-dim:#5a5040;
+    --border:#2a3048;--border-gold:#3a2e18;
+    --accent-a:#4a90d9;--accent-b:#7b68c8;
+    --shadow:0 4px 24px rgba(0,0,0,0.6);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg-deep);color:var(--text-primary);font-family:'Crimson Text',serif;font-size:16px;line-height:1.6;min-height:100vh;}
+  body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 60% 40% at 20% 20%,rgba(201,168,76,0.04) 0%,transparent 60%),radial-gradient(ellipse 50% 60% at 80% 80%,rgba(74,144,217,0.03) 0%,transparent 60%);pointer-events:none;z-index:0;}
+  .wrapper{position:relative;z-index:1;max-width:1240px;margin:0 auto;padding:26px 16px;}
+  header{text-align:center;margin-bottom:28px;padding-bottom:20px;border-bottom:1px solid var(--border-gold);position:relative;}
+  header::after{content:'⚔';position:absolute;bottom:-12px;left:50%;transform:translateX(-50%);background:var(--bg-deep);padding:0 10px;color:var(--gold);font-size:15px;}
+  h1{font-family:'Cinzel',serif;font-size:21px;font-weight:800;color:var(--gold-light);letter-spacing:0.08em;text-shadow:0 0 30px rgba(201,168,76,0.3);}
+  .subtitle{font-size:12px;color:var(--text-secondary);margin-top:4px;font-style:italic;}
+  .layout{display:grid;grid-template-columns:310px 1fr;gap:18px;align-items:start;}
+  .panel{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:15px;box-shadow:var(--shadow);}
+  .ptitle{font-family:'Cinzel',serif;font-size:11px;font-weight:600;color:var(--gold);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:12px;padding-bottom:7px;border-bottom:1px solid var(--border-gold);}
+  .csec{margin-bottom:15px;}
+  .clabel{font-family:'Cinzel',serif;font-size:10px;color:var(--text-secondary);letter-spacing:0.06em;margin-bottom:6px;}
+
+  /* タブ共通 */
+  .ptabs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:6px;}
+  .ptab{background:var(--bg-mid);border:1px solid var(--border);border-radius:5px;padding:6px 3px;text-align:center;cursor:pointer;transition:all 0.2s;font-family:'Cinzel',serif;font-size:10px;font-weight:600;color:var(--text-secondary);}
+  .ptab.active{background:var(--bg-raised);border-color:var(--gold-dim);color:var(--gold);}
+  .ptab:hover:not(.active){border-color:var(--steel);color:var(--steel-light);}
+  .pdesc{font-size:11px;color:var(--text-secondary);font-style:italic;padding:6px 8px;background:var(--bg-mid);border-radius:4px;border-left:2px solid var(--gold-dim);min-height:44px;}
+
+  /* 役 */
+  .role-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;}
+  .role-btn{background:var(--bg-mid);border:1px solid var(--border);border-radius:5px;padding:6px 5px;cursor:pointer;transition:all 0.2s;font-family:'Cinzel',serif;font-size:10px;color:var(--text-secondary);text-align:center;line-height:1.3;}
+  .role-btn.active{background:var(--bg-raised);border-color:var(--gold-dim);color:var(--gold);}
+  .role-btn:hover:not(.active){border-color:var(--steel);color:var(--steel-light);}
+  .role-tag{display:block;font-size:8px;color:var(--text-dim);margin-top:1px;}
+  .role-note{font-size:10px;color:var(--text-dim);font-style:italic;margin-top:4px;padding:4px 7px;background:var(--bg-mid);border-radius:4px;}
+
+  /* 選択モード */
+  .mode-tabs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;}
+  .mode-tab{background:var(--bg-mid);border:1px solid var(--border);border-radius:5px;padding:6px 3px;text-align:center;cursor:pointer;transition:all 0.2s;font-family:'Cinzel',serif;font-size:10px;font-weight:600;color:var(--text-secondary);}
+  .mode-tab.active-random{background:rgba(74,144,217,0.12);border-color:rgba(74,144,217,0.5);color:#7ab8e8;}
+  .mode-tab.active-optimal{background:rgba(143,188,60,0.12);border-color:rgba(143,188,60,0.5);color:var(--green-light);}
+  .mode-tab.active-both{background:rgba(201,168,76,0.12);border-color:var(--gold-dim);color:var(--gold);}
+  .mode-tab:hover:not([class*="active-"]){border-color:var(--steel);color:var(--steel-light);}
+
+  /* スライダー */
+  .srow{display:flex;align-items:center;gap:9px;}
+  input[type=range]{flex:1;-webkit-appearance:none;height:4px;background:var(--border);border-radius:2px;outline:none;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;background:var(--gold);border-radius:50%;cursor:pointer;}
+  .sval{font-family:'Cinzel',serif;font-size:12px;color:var(--gold);min-width:44px;text-align:right;}
+  .sval-gold{color:var(--gold-light);}
+
+  /* ターン入力 */
+  .tigrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .tiitem{display:flex;flex-direction:column;gap:3px;}
+  .ctag{font-family:'Cinzel',serif;font-size:9px;padding:1px 5px;border-radius:3px;display:inline-block;}
+  .tag-m{background:rgba(192,57,43,0.18);border:1px solid rgba(192,57,43,0.45);color:#e07060;}
+  .tag-e{background:rgba(74,144,217,0.15);border:1px solid rgba(74,144,217,0.4);color:#7ab8e8;}
+  .tiitem label{font-size:10px;color:var(--text-secondary);}
+  .tiitem input[type=number]{background:var(--bg-mid);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-family:'Cinzel',serif;font-size:14px;padding:5px 7px;width:100%;text-align:center;outline:none;transition:border-color 0.2s;}
+  .tiitem input[type=number]:focus{border-color:var(--gold-dim);}
+  .tinote{font-size:10px;color:var(--text-dim);font-style:italic;margin-top:4px;line-height:1.4;}
+
+  /* 山札 */
+  .dcards{display:flex;flex-direction:column;gap:2px;}
+  .dcard{display:flex;justify-content:space-between;align-items:center;padding:4px 8px;background:var(--bg-mid);border-radius:4px;border:1px solid var(--border);font-size:11px;}
+  .dcard .cn{color:var(--text-primary);} .dcard .cc{font-family:'Cinzel',serif;font-size:9px;color:var(--gold-dim);background:var(--bg-card);padding:1px 6px;border-radius:10px;}
+  .dc-g{border-left:2px solid var(--gold-dim);} .dc-r{border-left:2px solid var(--crimson-light);} .dc-m{border-left:2px solid var(--accent-a);} .dc-s{border-left:2px solid var(--steel);}
+  .dc-mass{border-left:2px solid var(--crimson-light);opacity:0.35;transition:opacity 0.2s;} .dc-emerg{border-left:2px solid var(--accent-a);opacity:0.35;transition:opacity 0.2s;}
+  .dc-mass.on{opacity:1;} .dc-emerg.on{opacity:1;}
+
+  .runbtn{width:100%;padding:11px;background:linear-gradient(135deg,#1e2a0a,#2a3a10);border:1px solid #4a6420;border-radius:6px;color:#8fbc3c;font-family:'Cinzel',serif;font-size:12px;font-weight:600;letter-spacing:0.1em;cursor:pointer;transition:all 0.25s;margin-top:5px;}
+  .runbtn:hover{border-color:#6a8c30;box-shadow:0 0 20px rgba(143,188,60,0.15);color:#aad050;}
+  .runbtn:active{transform:scale(0.98);}
+  .runbtn.running{color:var(--text-dim);border-color:var(--border);cursor:not-allowed;}
+
+  /* 結果 */
+  .rarea{display:flex;flex-direction:column;gap:14px;}
+  .progpanel{display:none;align-items:center;gap:10px;padding:10px 15px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;}
+  .progpanel.vis{display:flex;}
+  .progwrap{flex:1;height:4px;background:var(--border);border-radius:3px;overflow:hidden;}
+  .progfill{height:100%;background:linear-gradient(90deg,var(--gold-dim),var(--gold));border-radius:3px;transition:width 0.1s;width:0%;}
+  .progtxt{font-family:'Cinzel',serif;font-size:11px;color:var(--text-secondary);min-width:60px;text-align:right;}
+  .empty{text-align:center;padding:50px 20px;color:var(--text-dim);font-style:italic;}
+  .emicon{font-size:32px;margin-bottom:10px;opacity:0.4;}
+
+  /* 比較レイアウト */
+  .cmp2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .col-head{text-align:center;font-family:'Cinzel',serif;font-size:10px;font-weight:600;letter-spacing:0.08em;padding:7px 10px;border-radius:6px 6px 0 0;margin-bottom:-1px;}
+  .ch-rand{background:rgba(74,144,217,0.1);border:1px solid rgba(74,144,217,0.3);border-bottom:none;color:#7ab8e8;}
+  .ch-opt {background:rgba(143,188,60,0.1);border:1px solid rgba(143,188,60,0.3);border-bottom:none;color:var(--green-light);}
+
+  /* サマリーカード */
+  .sgrid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+  .sgrid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+  .scard{background:var(--bg-card);border:1px solid var(--border);border-radius:7px;padding:11px;text-align:center;position:relative;overflow:hidden;}
+  .scard::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+  .sc-g::before{background:linear-gradient(90deg,transparent,var(--gold),transparent);}
+  .sc-r::before{background:linear-gradient(90deg,transparent,var(--crimson-light),transparent);}
+  .sc-b::before{background:linear-gradient(90deg,transparent,var(--accent-a),transparent);}
+  .sc-gld::before{background:linear-gradient(90deg,transparent,var(--gold-light),transparent);}
+  .sval2{font-family:'Cinzel',serif;font-size:21px;font-weight:800;line-height:1;margin-bottom:3px;}
+  .sc-g .sval2{color:var(--gold-light);} .sc-r .sval2{color:#e05050;} .sc-b .sval2{color:#6aaae8;} .sc-gld .sval2{color:var(--gold-light);}
+  .slabel{font-size:9px;color:var(--text-secondary);font-family:'Cinzel',serif;letter-spacing:0.07em;line-height:1.3;}
+  .ssub{font-size:9px;color:var(--text-dim);margin-top:2px;font-style:italic;}
+
+  /* FB達成率 */
+  .fbcard{background:var(--bg-card);border:1px solid var(--border-gold);border-radius:7px;padding:11px;text-align:center;}
+  .fbval{font-family:'Cinzel',serif;font-size:26px;font-weight:800;line-height:1;margin-bottom:2px;}
+  .fblabel{font-size:9px;color:var(--text-secondary);font-family:'Cinzel',serif;letter-spacing:0.07em;}
+  .fbsub{font-size:9px;color:var(--text-dim);margin-top:2px;font-style:italic;}
+  .diff-badge{font-family:'Cinzel',serif;font-size:9px;padding:1px 5px;border-radius:3px;display:inline-block;margin-left:3px;}
+  .diff-up{background:rgba(74,188,80,0.15);border:1px solid rgba(74,188,80,0.4);color:#70d890;}
+  .diff-dn{background:rgba(220,60,60,0.12);border:1px solid rgba(220,60,60,0.3);color:#e07070;}
+
+  /* ユニットテーブル */
+  .utable{width:100%;border-collapse:collapse;font-size:11px;}
+  .utable th{font-family:'Cinzel',serif;font-size:9px;color:var(--text-secondary);letter-spacing:0.08em;padding:4px 6px;border-bottom:1px solid var(--border);text-align:left;font-weight:600;}
+  .utable td{padding:5px 6px;border-bottom:1px solid rgba(42,48,72,0.5);color:var(--text-primary);vertical-align:middle;}
+  .utable tr:last-child td{border-bottom:none;}
+  .utable tr:hover td{background:rgba(255,255,255,0.02);}
+  .utable tr.trow td{background:rgba(201,168,76,0.05);}
+  .utable tr.trow .uname{color:var(--gold);}
+  .bcell{min-width:65px;}
+  .bwrap{height:4px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:2px;}
+  .bfill{height:100%;border-radius:3px;}
+  .br{background:linear-gradient(90deg,var(--crimson),var(--crimson-light));}
+  .bm{background:linear-gradient(90deg,var(--accent-b),var(--accent-a));}
+  .cbadge{font-family:'Cinzel',serif;font-size:10px;font-weight:600;min-width:24px;text-align:right;display:inline-block;}
+  .cr{color:#e05050;} .cm{color:#6aaae8;}
+
+  /* 折れ線グラフ（Canvas） */
+  .chart-container{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:15px;}
+  .chart-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+  .chart-heading{font-family:'Cinzel',serif;font-size:10px;color:var(--text-secondary);letter-spacing:0.1em;}
+  .chart-legend-row{display:flex;gap:12px;flex-wrap:wrap;}
+  .li{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-secondary);}
+  .ld{width:20px;height:3px;border-radius:2px;}
+  canvas{display:block;width:100%;height:160px;}
+
+  /* 個別プレイ */
+  .prow{display:flex;gap:6px;padding:5px 9px;background:var(--bg-mid);border-radius:4px;margin-bottom:4px;align-items:flex-start;flex-wrap:wrap;border-left:3px solid var(--border);}
+  .prow:hover{border-left-color:var(--gold-dim);}
+  .pnum{font-family:'Cinzel',serif;font-size:10px;color:var(--text-dim);min-width:40px;padding-top:1px;}
+  .punits{flex:1;display:flex;flex-wrap:wrap;gap:2px;}
+  .uchip{font-size:10px;padding:1px 5px;border-radius:3px;border:1px solid;}
+  .ch-r{background:rgba(192,57,43,0.15);border-color:rgba(192,57,43,0.4);color:#e07060;}
+  .ch-m{background:rgba(74,144,217,0.12);border-color:rgba(74,144,217,0.35);color:#7ab8e8;}
+  .ch-mass{background:rgba(220,100,60,0.22);border-color:rgba(220,100,60,0.55);color:#ff9070;}
+  .ch-emerg{background:rgba(74,200,100,0.14);border-color:rgba(74,200,100,0.4);color:#70d890;}
+  .ch-target{background:rgba(201,168,76,0.18);border-color:rgba(201,168,76,0.5);color:var(--gold);}
+  .ptotal{font-family:'Cinzel',serif;font-size:10px;color:var(--gold-dim);padding-top:1px;min-width:44px;text-align:right;}
+  .pfootnote{font-size:10px;color:var(--text-dim);font-style:italic;padding:7px 11px;border-top:1px solid var(--border);margin-top:6px;}
+
+  @keyframes fadeIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+  .ai{animation:fadeIn 0.3s ease forwards;}
+
+  /* 雇用コストトグル */
+  .hire-cost-btn{background:var(--bg-mid);border:1px solid var(--border);border-radius:5px;padding:7px 8px;cursor:pointer;transition:all 0.2s;font-family:'Cinzel',serif;font-size:10px;font-weight:600;color:var(--text-secondary);text-align:center;line-height:1.3;}
+  .hire-cost-btn.active{background:rgba(201,168,76,0.12);border-color:var(--gold-dim);color:var(--gold);}
+  .hire-cost-btn:hover:not(.active){border-color:var(--steel);color:var(--steel-light);}
+
+  @media(max-width:800px){.layout{grid-template-columns:1fr;}.cmp2{grid-template-columns:1fr;}.sgrid4{grid-template-columns:repeat(2,1fr);}}
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <header>
+    <h1>軍人勢力 雇用シミュレーター</h1>
+    <p class="subtitle">25ターン内の正規兵・傭兵雇用期待値 ／ ランダム vs 最適選択 ／ 金収支推移 — GDD v1.22</p>
+  </header>
+
+  <div class="layout">
+    <!-- 左：設定 -->
+    <div>
+      <div class="panel">
+        <div class="ptitle">⚙ シミュレーション設定</div>
+
+        <div class="csec">
+          <div class="clabel">プレイパターン</div>
+          <div class="ptabs">
+            <div class="ptab active" data-pat="A" onclick="selPat('A')">パターン A</div>
+            <div class="ptab" data-pat="B" onclick="selPat('B')">パターン B</div>
+            <div class="ptab" data-pat="C" onclick="selPat('C')">パターン C</div>
+          </div>
+          <div class="pdesc" id="patDesc"></div>
+        </div>
+
+        <div class="csec">
+          <div class="clabel">目標フォーメーション役</div>
+          <div class="role-grid" id="roleGrid"></div>
+          <div class="role-note" id="roleNote"></div>
+        </div>
+
+        <div class="csec">
+          <div class="clabel">候補選択モード</div>
+          <div class="mode-tabs">
+            <div class="mode-tab active-random" data-mode="random" onclick="selMode('random')">ランダム</div>
+            <div class="mode-tab" data-mode="optimal" onclick="selMode('optimal')">最適選択</div>
+            <div class="mode-tab" data-mode="both" onclick="selMode('both')">両方比較</div>
+          </div>
+          <div id="modeNote" style="font-size:10px;color:var(--text-dim);font-style:italic;margin-top:4px;"></div>
+        </div>
+
+        <!-- 金収支設定 -->
+        <div class="csec">
+          <div class="clabel">💰 金収支設定</div>
+
+          <div style="margin-bottom:8px;">
+            <div style="font-size:10px;color:var(--text-secondary);margin-bottom:5px;">都市収入（平均 金/T）</div>
+            <div class="srow">
+              <input type="range" id="cityIncome" min="0" max="6" step="0.5" value="2" oninput="updGoldLabels()">
+              <span class="sval sval-gold" id="cityIncomeLabel">2.0</span>
+            </div>
+            <div style="font-size:9px;color:var(--text-dim);margin-top:3px;">Lv1=1/T、Lv3=2/T、市場建設後=+2/T。平均値で近似。</div>
+          </div>
+
+          <div style="margin-bottom:8px;">
+            <div style="font-size:10px;color:var(--text-secondary);margin-bottom:5px;">初期所持金</div>
+            <div class="srow">
+              <input type="range" id="initGold" min="0" max="10" step="1" value="3" oninput="updGoldLabels()">
+              <span class="sval sval-gold" id="initGoldLabel">3</span>
+            </div>
+          </div>
+
+          <div style="margin-bottom:8px;">
+            <div style="font-size:10px;color:var(--text-secondary);margin-bottom:5px;">傭兵の維持費（平均 金/T/体）</div>
+            <div class="srow">
+              <input type="range" id="mercUpkeep" min="0" max="3" step="0.5" value="1" oninput="updGoldLabels()">
+              <span class="sval sval-gold" id="mercUpkeepLabel">1.0</span>
+            </div>
+            <div style="font-size:9px;color:var(--text-dim);margin-top:3px;">槍傭兵・弓傭兵・重装傭兵=1/T、傭兵騎馬=2/T。</div>
+          </div>
+
+          <div>
+            <div style="font-size:10px;color:var(--text-secondary);margin-bottom:6px;">雇用コスト</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">
+              <div class="hire-cost-btn active" id="hcBtnOn" onclick="setHireCost(true)">
+                💰 傭兵雇用コストあり
+                <span style="display:block;font-size:8px;color:var(--text-dim);margin-top:1px;">金が足りない時はスキップ</span>
+              </div>
+              <div class="hire-cost-btn" id="hcBtnOff" onclick="setHireCost(false)">
+                🆓 傭兵雇用コストなし
+                <span style="display:block;font-size:8px;color:var(--text-dim);margin-top:1px;">維持費のみ金が消費される</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="csec">
+          <div class="clabel">習得候補カード入手ターン（0＝なし）</div>
+          <div class="tigrid">
+            <div class="tiitem">
+              <span class="ctag tag-m">大量徴兵</span>
+              <label>入手ターン N（0〜25）</label>
+              <input type="number" id="massT" min="0" max="25" value="0" oninput="updPreview()">
+            </div>
+            <div class="tiitem">
+              <span class="ctag tag-e">緊急徴兵</span>
+              <label>入手ターン M（0〜25）</label>
+              <input type="number" id="emergT" min="0" max="25" value="0" oninput="updPreview()">
+            </div>
+          </div>
+          <div class="tinote">大量徴兵（コスト2）：候補なしランダム<br>緊急徴兵（コスト1）：正規兵優先選択</div>
+        </div>
+
+        <div class="csec">
+          <div class="clabel">山札構成</div>
+          <div class="dcards">
+            <div class="dcard dc-g"><span class="cn">金を得る</span><span class="cc">×3（+2金）</span></div>
+            <div class="dcard dc-r"><span class="cn">正規兵の雇用</span><span class="cc">×1</span></div>
+            <div class="dcard dc-m"><span class="cn">傭兵の雇用</span><span class="cc">×1</span></div>
+            <div class="dcard dc-s"><span class="cn">調略</span><span class="cc">×1</span></div>
+            <div class="dcard dc-mass" id="pvMass"><span class="cn">大量徴兵</span><span class="cc" id="pvMassTxt">未入手</span></div>
+            <div class="dcard dc-emerg" id="pvEmerg"><span class="cn">緊急徴兵</span><span class="cc" id="pvEmergTxt">未入手</span></div>
+          </div>
+        </div>
+
+        <div class="csec">
+          <div class="clabel">試行回数</div>
+          <div class="srow">
+            <input type="range" id="trialSlider" min="3" max="500" step="1" value="10" oninput="updTrial()">
+            <span class="sval" id="trialLabel">10回</span>
+          </div>
+          <div id="trialHint" style="font-size:10px;color:var(--text-dim);font-style:italic;margin-top:3px;">少＝偏りが見える　多＝平均に収束</div>
+        </div>
+
+        <button class="runbtn" id="runBtn" onclick="runSim()">▶ シミュレーション実行</button>
+      </div>
+    </div>
+
+    <!-- 右：結果 -->
+    <div class="rarea">
+      <div class="progpanel" id="progPanel">
+        <div class="progwrap"><div class="progfill" id="progFill"></div></div>
+        <span class="progtxt" id="progTxt">0%</span>
+      </div>
+      <div id="emptyState" class="empty">
+        <div class="emicon">⚔</div>
+        <div>シミュレーションを実行すると結果が表示されます</div>
+      </div>
+      <div id="resultRoot" style="display:none;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==============================
+// 定数
+// ==============================
+const TURNS=25, HAND_SIZE=3;
+const REGULAR_UNITS=['槍兵','重装歩兵','騎馬兵','騎士','弓兵','弩兵','司令官','斥候'];
+const MERC_UNITS=['槍傭兵','弓傭兵','重装傭兵','傭兵騎馬'];
+const DECK_INIT=['gold','gold','gold','regular','merc','strategy'];
+
+// 正規兵の雇用コスト（GDD 8.3）
+const REG_HIRE_COST={
+  '槍兵':2,'重装歩兵':3,'騎馬兵':3,'騎士':4,'弓兵':2,'弩兵':3,'司令官':4,'斥候':3
+};
+// 傭兵Cの雇用コスト（GDD 8.2）
+const MERC_HIRE_COST={
+  '槍傭兵':2,'弓傭兵':2,'重装傭兵':3,'傭兵騎馬':3
+};
+// 傭兵Cの維持費（GDD 8.2） — スライダーで上書きされる平均値も使う
+const MERC_UPKEEP_BASE={
+  '槍傭兵':1,'弓傭兵':1,'重装傭兵':1,'傭兵騎馬':2
+};
+
+const ROLES=[
+  {id:'spear',   name:'槍衾',    targetUnits:['槍兵'],          fb3:3,fb5:5},
+  {id:'cavalry', name:'騎兵突撃', targetUnits:['騎馬兵','騎士'], fb3:3,fb5:5},
+  {id:'archer',  name:'弓兵集中', targetUnits:['弓兵','弩兵'],   fb3:3,fb5:5},
+  {id:'mixed',   name:'混成精鋭', targetUnits:REGULAR_UNITS,     fb3:4,fb5:5},
+  {id:'none',    name:'役なし',   targetUnits:[],                fb3:0,fb5:0},
+];
+
+const PAT_DESC={
+  A:'<strong style="color:var(--gold)">大量・緊急徴兵を優先</strong>。それ以外は正規兵＋傭兵の雇用を<strong style="color:var(--gold)">両方プレイ</strong>。',
+  B:'<strong style="color:var(--gold)">大量・緊急徴兵を優先</strong>。それ以外は<strong style="color:var(--gold)">正規兵の雇用のみ</strong>（傭兵単独ならプレイ）。',
+  C:'大量・緊急徴兵は<strong style="color:var(--gold)">プレイしない</strong>。正規兵＋傭兵の雇用を両方プレイ。',
+};
+const MODE_NOTE={
+  random:'候補2体のうち1体をランダム選択。純粋な確率検証。',
+  optimal:'目標役のユニットが候補にいれば優先選択。プレイヤーが常に最善を選ぶ場合。',
+  both:'ランダムと最適選択を同時実行して横並び比較。',
+};
+
+let curPat='A', curRole='spear', curMode='random', hireCostEnabled=true;
+
+// ==============================
+// UI初期化
+// ==============================
+function setHireCost(enabled){
+  hireCostEnabled=enabled;
+  document.getElementById('hcBtnOn').classList.toggle('active', enabled);
+  document.getElementById('hcBtnOff').classList.toggle('active', !enabled);
+}
+function init(){
+  document.getElementById('roleGrid').innerHTML=ROLES.map(r=>
+    `<div class="role-btn${r.id===curRole?' active':''}" data-role="${r.id}" onclick="selRole('${r.id}')">
+      ${r.name}<span class="role-tag">${r.fb3>0?`FB3:${r.fb3}体/FB5:${r.fb5}体`:''}</span>
+    </div>`
+  ).join('');
+  selPat('A'); selMode('random'); updRoleNote(); updPreview(); updTrial(); updGoldLabels();
+}
+function selPat(p){curPat=p;document.querySelectorAll('.ptab').forEach(t=>t.classList.toggle('active',t.dataset.pat===p));document.getElementById('patDesc').innerHTML=PAT_DESC[p];}
+function selRole(r){curRole=r;document.querySelectorAll('.role-btn').forEach(b=>b.classList.toggle('active',b.dataset.role===r));updRoleNote();}
+function updRoleNote(){
+  const role=ROLES.find(r=>r.id===curRole); const note=document.getElementById('roleNote');
+  if(!role||role.id==='none'){note.textContent='目標ユニットを設定しません。';return;}
+  if(role.id==='mixed'){note.textContent='全異種を揃える役。ランダム選択と実質同等。';return;}
+  note.textContent=`優先：${role.targetUnits.join('/')}　FB3に${role.fb3}体必要。`;
+}
+function selMode(m){
+  curMode=m;
+  document.querySelectorAll('.mode-tab').forEach(t=>{t.className='mode-tab';if(t.dataset.mode===m)t.classList.add(`active-${m}`);});
+  document.getElementById('modeNote').textContent=MODE_NOTE[m];
+}
+function updPreview(){
+  const mt=getT('massT'),et=getT('emergT');
+  document.getElementById('pvMassTxt').textContent=mt>0?`T${mt}入手`:'未入手';
+  document.getElementById('pvEmergTxt').textContent=et>0?`T${et}入手`:'未入手';
+  document.getElementById('pvMass').classList.toggle('on',mt>0);
+  document.getElementById('pvEmerg').classList.toggle('on',et>0);
+}
+function updTrial(){
+  const v=parseInt(document.getElementById('trialSlider').value);
+  document.getElementById('trialLabel').textContent=v.toLocaleString()+'回';
+  document.getElementById('trialHint').style.color=v<=5?'var(--gold-dim)':v<=30?'var(--steel)':'var(--text-dim)';
+}
+function updGoldLabels(){
+  document.getElementById('cityIncomeLabel').textContent=parseFloat(document.getElementById('cityIncome').value).toFixed(1);
+  document.getElementById('initGoldLabel').textContent=document.getElementById('initGold').value;
+  document.getElementById('mercUpkeepLabel').textContent=parseFloat(document.getElementById('mercUpkeep').value).toFixed(1);
+}
+function getT(id){return Math.max(0,Math.min(25,parseInt(document.getElementById(id).value)||0));}
+function getF(id){return parseFloat(document.getElementById(id).value)||0;}
+
+// ==============================
+// シミュレーション
+// ==============================
+function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
+function pickRand(a){return a[Math.floor(Math.random()*a.length)];}
+function pickReg2rand(){const c1=pickRand(REGULAR_UNITS);let c2=pickRand(REGULAR_UNITS);while(c2===c1)c2=pickRand(REGULAR_UNITS);return pickRand([c1,c2]);}
+function pickReg2opt(t){const c1=pickRand(REGULAR_UNITS);let c2=pickRand(REGULAR_UNITS);while(c2===c1)c2=pickRand(REGULAR_UNITS);if(!t||!t.length)return pickRand([c1,c2]);if(t.includes(c1)&&!t.includes(c2))return c1;if(t.includes(c2)&&!t.includes(c1))return c2;return pickRand([c1,c2]);}
+function pickRegRand(){return pickRand(REGULAR_UNITS);}
+function pickEmerg(t,opt){return opt?pickReg2opt(t):pickReg2rand();}
+function countFB(rc,role){if(!role||role.fb3===0)return{fb3:false,fb5:false};const tot=role.targetUnits.reduce((s,u)=>s+(rc[u]||0),0);return{fb3:tot>=role.fb3,fb5:tot>=role.fb5};}
+
+function runOneTrial(pattern,massHT,emergHT,role,isOpt,cityIncome,initGold,mercUpkeepRate,hireCost){
+  let deck=shuffle([...DECK_INIT]),discard=[];
+  const rc={}; REGULAR_UNITS.forEach(u=>rc[u]=0);
+  const mc={}; MERC_UNITS.forEach(u=>mc[u]=0);
+  const trReg=Array(TURNS).fill(0),trMerc=Array(TURNS).fill(0);
+  const hired=[];
+  const goldByTurn=[];   // ターン末の所持金
+  const inByTurn=[];     // ターン収入合計
+  const outByTurn=[];    // ターン支出合計（雇用＋維持費）
+
+  let gold=initGold;
+  const targets=role?role.targetUnits:[];
+  // 保有傭兵リスト（維持費計算用）
+  const ownedMercs=[];
+
+  for(let t=0;t<TURNS;t++){
+    const turnNo=t+1;
+    if(massHT>0&&turnNo===massHT) deck.push('massHire');
+    if(emergHT>0&&turnNo===emergHT) deck.push('emergHire');
+    while(deck.length<HAND_SIZE){deck=[...deck,...shuffle(discard)];discard=[];if(deck.length===0)break;}
+    const drawN=Math.min(HAND_SIZE,deck.length);
+    const hand=deck.splice(0,drawN);
+
+    // 収入フェーズ
+    let income=cityIncome;
+    const goldCardsInHand=hand.filter(c=>c==='gold').length;
+    income+=goldCardsInHand*2; // 「金を得る」カード（コスト1で即時使用前提）
+    gold+=income;
+
+    // 傭兵維持費（保有数×維持費）
+    const upkeep=ownedMercs.length*mercUpkeepRate;
+    gold=Math.max(0, gold-upkeep);
+
+    let spend=0;
+    const hasReg=hand.includes('regular'),hasMerc=hand.includes('merc');
+    const hasMass=hand.includes('massHire'),hasEmerg=hand.includes('emergHire');
+    let doReg=false,doMerc=false,doMass=false,doEmerg=false;
+
+    if(pattern==='C'){
+      if(hasReg&&hasMerc){doReg=true;doMerc=true;}
+      else if(hasReg)doReg=true;
+      else if(hasMerc)doMerc=true;
+    }else{
+      if(hasMass)doMass=true;
+      if(hasEmerg)doEmerg=true;
+      if(pattern==='A'){
+        if(hasReg&&hasMerc){doReg=true;doMerc=true;}
+        else if(hasReg)doReg=true;
+        else if(hasMerc)doMerc=true;
+      }else{
+        if(hasReg)doReg=true;
+        else if(hasMerc)doMerc=true;
+      }
+    }
+
+    // 雇用実行（hireCost=trueの時のみ金チェック・減算）
+    if(doReg){
+      const u=isOpt?pickReg2opt(targets):pickReg2rand();
+      const cost=0;
+      if(gold>=cost){gold-=cost;spend+=cost;rc[u]++;trReg[t]++;hired.push({turnNo,source:'regular',unit:u,isTarget:targets.includes(u)});}
+    }
+    if(doMerc){
+      const u=pickRand(MERC_UNITS);
+      const cost=hireCost?(MERC_HIRE_COST[u]||2):0;
+      if(gold>=cost){gold-=cost;spend+=cost;mc[u]++;trMerc[t]++;ownedMercs.push(u);hired.push({turnNo,source:'merc',unit:u,isTarget:false});}
+    }
+    if(doMass){
+      const u=pickRegRand();
+      const cost=hireCost?2:0;
+      if(gold>=cost){gold-=cost;spend+=cost;rc[u]++;trReg[t]++;hired.push({turnNo,source:'massHire',unit:u,isTarget:targets.includes(u)});}
+    }
+    if(doEmerg){
+      const u=pickEmerg(targets,isOpt);
+      const cost=hireCost?Math.ceil((REG_HIRE_COST[u]||2)/2):0;
+      if(gold>=cost){gold-=cost;spend+=cost;rc[u]++;trReg[t]++;hired.push({turnNo,source:'emergHire',unit:u,isTarget:targets.includes(u)});}
+    }
+
+    goldByTurn.push(gold);
+    inByTurn.push(income);
+    outByTurn.push(upkeep+spend);
+    discard.push(...hand);
+  }
+
+  const fb=countFB(rc,role);
+  return{regularCount:rc,mercCount:mc,turnRegular:trReg,turnMerc:trMerc,hired,fb,goldByTurn,inByTurn,outByTurn};
+}
+
+async function aggregate(trials,pattern,massT,emergT,role,isOpt,cityIncome,initGold,mercUpkeep,hireCost,onProg){
+  const regTotal={}; REGULAR_UNITS.forEach(u=>regTotal[u]=0);
+  const mercTotal={}; MERC_UNITS.forEach(u=>mercTotal[u]=0);
+  const trReg=Array(TURNS).fill(0),trMerc=Array(TURNS).fill(0);
+  const goldTotal=Array(TURNS).fill(0);
+  const inTotal=Array(TURNS).fill(0),outTotal=Array(TURNS).fill(0);
+  let fb3cnt=0,fb5cnt=0;
+  const allTrials=[];
+
+  const CHUNK=50; let done=0;
+  while(done<trials){
+    const n=Math.min(CHUNK,trials-done);
+    for(let i=0;i<n;i++){
+      const res=runOneTrial(pattern,massT,emergT,role,isOpt,cityIncome,initGold,mercUpkeep,hireCost);
+      REGULAR_UNITS.forEach(u=>regTotal[u]+=res.regularCount[u]);
+      MERC_UNITS.forEach(u=>mercTotal[u]+=res.mercCount[u]);
+      for(let t=0;t<TURNS;t++){trReg[t]+=res.turnRegular[t];trMerc[t]+=res.turnMerc[t];goldTotal[t]+=res.goldByTurn[t];inTotal[t]+=res.inByTurn[t];outTotal[t]+=res.outByTurn[t];}
+      if(res.fb.fb3)fb3cnt++;if(res.fb.fb5)fb5cnt++;
+      allTrials.push(res);
+    }
+    done+=n; onProg(done/trials);
+    await new Promise(r=>setTimeout(r,0));
+  }
+  const regAvg={}; REGULAR_UNITS.forEach(u=>regAvg[u]=regTotal[u]/trials);
+  const mercAvg={}; MERC_UNITS.forEach(u=>mercAvg[u]=mercTotal[u]/trials);
+  const trRegAvg=trReg.map(v=>v/trials),trMercAvg=trMerc.map(v=>v/trials);
+  const goldAvg=goldTotal.map(v=>v/trials);
+  const inAvg=inTotal.map(v=>v/trials),outAvg=outTotal.map(v=>v/trials);
+  const totalReg=REGULAR_UNITS.reduce((s,u)=>s+regAvg[u],0),totalMerc=MERC_UNITS.reduce((s,u)=>s+mercAvg[u],0);
+  const regPPT=trReg.reduce((s,v)=>s+v,0)/trials/TURNS,mercPPT=trMerc.reduce((s,v)=>s+v,0)/trials/TURNS;
+  const finalGold=goldAvg[TURNS-1];
+  return{regAvg,mercAvg,trRegAvg,trMercAvg,totalReg,totalMerc,regPPT,mercPPT,
+         fb3Rate:fb3cnt/trials*100,fb5Rate:fb5cnt/trials*100,
+         goldAvg,inAvg,outAvg,finalGold,allTrials};
+}
+
+async function runSim(){
+  const btn=document.getElementById('runBtn');
+  const trials=parseInt(document.getElementById('trialSlider').value);
+  const massT=getT('massT'),emergT=getT('emergT');
+  const role=ROLES.find(r=>r.id===curRole)||ROLES[0];
+  const cityIncome=getF('cityIncome'),initGold=getF('initGold'),mercUpkeep=getF('mercUpkeep');
+  const hireCost=hireCostEnabled;
+
+  btn.textContent='⏳ 実行中...'; btn.classList.add('running'); btn.disabled=true;
+  document.getElementById('progPanel').classList.add('vis');
+  document.getElementById('progFill').style.width='0%';
+  document.getElementById('progTxt').textContent='0%';
+  document.getElementById('emptyState').style.display='none';
+  document.getElementById('resultRoot').style.display='none';
+
+  const setP=p=>{document.getElementById('progFill').style.width=(p*100).toFixed(0)+'%';document.getElementById('progTxt').textContent=(p*100).toFixed(0)+'%';};
+
+  let randRes=null,optRes=null;
+  if(curMode==='random') randRes=await aggregate(trials,curPat,massT,emergT,role,false,cityIncome,initGold,mercUpkeep,hireCost,setP);
+  else if(curMode==='optimal') optRes=await aggregate(trials,curPat,massT,emergT,role,true,cityIncome,initGold,mercUpkeep,hireCost,setP);
+  else{randRes=await aggregate(trials,curPat,massT,emergT,role,false,cityIncome,initGold,mercUpkeep,hireCost,p=>setP(p*0.5));optRes=await aggregate(trials,curPat,massT,emergT,role,true,cityIncome,initGold,mercUpkeep,hireCost,p=>setP(0.5+p*0.5));}
+
+  renderAll({trials,massT,emergT,role,cityIncome,initGold,mercUpkeep,randRes,optRes});
+
+  btn.textContent='▶ シミュレーション実行'; btn.classList.remove('running'); btn.disabled=false;
+  document.getElementById('progPanel').classList.remove('vis');
+}
+
+// ==============================
+// 描画
+// ==============================
+function fmt(v,d=1){return Number(v).toFixed(d);}
+function fmtPct(v,d=1){return Number(v).toFixed(d)+'%';}
+function diffBadge(v){if(Math.abs(v)<0.05)return '';const s=v>0?'+':'';const c=v>=0?'diff-up':'diff-dn';return `<span class="diff-badge ${c}">${s}${fmt(v)}pp</span>`;}
+
+function renderAll({trials,massT,emergT,role,cityIncome,initGold,mercUpkeep,randRes,optRes}){
+  const root=document.getElementById('resultRoot');
+  root.innerHTML=''; root.style.display='flex'; root.style.flexDirection='column'; root.style.gap='14px';
+  const isBoth=randRes&&optRes;
+
+  if(isBoth){
+    root.appendChild(mkCmpSummary(trials,role,randRes,optRes,massT,emergT));
+    if(role.fb3>0)root.appendChild(mkCmpFB(role,randRes,optRes));
+    // 金収支グラフ（横並び）
+    root.appendChild(mkGoldChartCmp(randRes,optRes,initGold));
+    root.appendChild(mkCmpTables(role,randRes,optRes));
+    root.appendChild(mkCmpBarCharts(randRes,optRes));
+    if(trials<=50)root.appendChild(mkCmpIndividual(randRes,optRes,role));
+  }else{
+    const res=randRes||optRes,isOpt=!!optRes;
+    root.appendChild(mkSingleSummary(trials,role,res,isOpt,massT,emergT));
+    if(role.fb3>0)root.appendChild(mkSingleFB(role,res));
+    root.appendChild(mkGoldChartSingle(res,isOpt,initGold));
+    root.appendChild(mkSingleTable(role,res,isOpt));
+    root.appendChild(mkSingleBarChart(res));
+    if(trials<=50)root.appendChild(mkSingleIndividual(res,isOpt,role));
+  }
+}
+
+// --- サマリー ---
+function mkSingleSummary(trials,role,res,isOpt,massT,emergT){
+  const extras=[]; if(massT>0)extras.push(`大量徴兵T${massT}`); if(emergT>0)extras.push(`緊急徴兵T${emergT}`);
+  const el=document.createElement('div'); el.className='sgrid4 ai';
+  el.innerHTML=`
+    <div class="scard sc-g"><div class="sval2">${fmt(res.totalReg+res.totalMerc)}</div><div class="slabel">総雇用数（平均）</div><div class="ssub">正規兵${fmt(res.totalReg)}+傭兵${fmt(res.totalMerc)}</div></div>
+    <div class="scard sc-r"><div class="sval2">${fmt(res.regPPT*100)}%</div><div class="slabel">正規兵系 1T発動率</div><div class="ssub">25Tで${fmt(res.regPPT*25)}回</div></div>
+    <div class="scard sc-gld"><div class="sval2">${fmt(res.finalGold)}</div><div class="slabel">ターン25末 所持金（平均）</div><div class="ssub">${isOpt?'最適選択':'ランダム'}</div></div>
+    <div class="scard sc-b"><div class="sval2">${fmt(res.mercPPT*100)}%</div><div class="slabel">傭兵雇用 1T発動率</div><div class="ssub">25Tで${fmt(res.mercPPT*25)}回</div></div>`;
+  return el;
+}
+function mkCmpSummary(trials,role,rand,opt,massT,emergT){
+  const el=document.createElement('div'); el.className='cmp2 ai';
+  [['ランダム選択',rand,'ch-rand'],['最適選択',opt,'ch-opt']].forEach(([label,res,cls])=>{
+    const col=document.createElement('div');
+    col.innerHTML=`<div class="col-head ${cls}">${label}</div>`;
+    const sg=document.createElement('div'); sg.className='sgrid3';
+    sg.innerHTML=`
+      <div class="scard sc-g"><div class="sval2">${fmt(res.totalReg+res.totalMerc)}</div><div class="slabel">総雇用数</div><div class="ssub">正規兵${fmt(res.totalReg)}+傭兵${fmt(res.totalMerc)}</div></div>
+      <div class="scard sc-r"><div class="sval2">${fmt(res.regPPT*100)}%</div><div class="slabel">正規兵系 1T発動率</div><div class="ssub">25Tで${fmt(res.regPPT*25)}回</div></div>
+      <div class="scard sc-gld"><div class="sval2">${fmt(res.finalGold)}</div><div class="slabel">T25末 所持金</div><div class="ssub">${trials.toLocaleString()}試行平均</div></div>`;
+    col.appendChild(sg); el.appendChild(col);
+  });
+  return el;
+}
+
+// --- FB達成率 ---
+function mkSingleFB(role,res){
+  const el=document.createElement('div'); el.className='ai'; el.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:10px;';
+  el.innerHTML=`
+    <div class="fbcard"><div class="fbval" style="color:var(--gold-light)">${fmtPct(res.fb3Rate)}</div><div class="fblabel">${role.name} FB3達成率</div><div class="fbsub">${role.targetUnits.join('/')}が${role.fb3}体以上</div></div>
+    <div class="fbcard"><div class="fbval" style="color:#e8c96e;font-size:22px">${fmtPct(res.fb5Rate)}</div><div class="fblabel">${role.name} FB5達成率</div><div class="fbsub">${role.targetUnits.join('/')}が${role.fb5}体以上</div></div>`;
+  return el;
+}
+function mkCmpFB(role,rand,opt){
+  const el=document.createElement('div'); el.className='cmp2 ai';
+  [['ランダム選択',rand,'ch-rand',false],['最適選択',opt,'ch-opt',true]].forEach(([label,res,cls,isOpt])=>{
+    const col=document.createElement('div');
+    col.innerHTML=`<div class="col-head ${cls}">${label}</div>`;
+    const inner=document.createElement('div'); inner.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px;';
+    inner.innerHTML=`
+      <div class="fbcard"><div class="fbval" style="color:var(--gold-light)">${fmtPct(res.fb3Rate)}</div><div class="fblabel">${role.name} FB3達成率</div><div class="fbsub">${isOpt?diffBadge(opt.fb3Rate-rand.fb3Rate):''}</div></div>
+      <div class="fbcard"><div class="fbval" style="color:#e8c96e;font-size:20px">${fmtPct(res.fb5Rate)}</div><div class="fblabel">${role.name} FB5達成率</div><div class="fbsub">${isOpt?diffBadge(opt.fb5Rate-rand.fb5Rate):''}</div></div>`;
+    col.appendChild(inner); el.appendChild(col);
+  });
+  return el;
+}
+
+// --- 金収支折れ線グラフ（Canvas） ---
+function mkGoldChartSingle(res,isOpt,initGold){
+  const el=document.createElement('div'); el.className='chart-container ai';
+  const cid='goldCanvas_'+Date.now();
+  el.innerHTML=`
+    <div class="chart-top">
+      <span class="chart-heading">💰 金収支推移（ターン別平均）</span>
+      <div class="chart-legend-row">
+        <div class="li"><div class="ld" style="background:#e8c96e"></div>所持金残高</div>
+        <div class="li"><div class="ld" style="background:#7abc50"></div>収入</div>
+        <div class="li"><div class="ld" style="background:#e05050"></div>支出（雇用＋維持費）</div>
+      </div>
+    </div>
+    <canvas id="${cid}" height="160"></canvas>`;
+  setTimeout(()=>drawGoldCanvas(cid,[res],['#e8c96e'],initGold),10);
+  return el;
+}
+function mkGoldChartCmp(rand,opt,initGold){
+  const el=document.createElement('div'); el.className='chart-container ai';
+  const cid='goldCanvas_'+Date.now();
+  el.innerHTML=`
+    <div class="chart-top">
+      <span class="chart-heading">💰 金収支推移（所持金残高 ターン別平均比較）</span>
+      <div class="chart-legend-row">
+        <div class="li"><div class="ld" style="background:#7ab8e8"></div>ランダム選択</div>
+        <div class="li"><div class="ld" style="background:#7abc50"></div>最適選択</div>
+      </div>
+    </div>
+    <canvas id="${cid}" height="160"></canvas>`;
+  setTimeout(()=>drawGoldCanvas(cid,[rand,opt],['#7ab8e8','#7abc50'],initGold),10);
+  return el;
+}
+
+function drawGoldCanvas(cid,results,colors,initGold){
+  const canvas=document.getElementById(cid); if(!canvas)return;
+  const dpr=window.devicePixelRatio||1;
+  const W=canvas.offsetWidth,H=canvas.offsetHeight||160;
+  canvas.width=W*dpr; canvas.height=H*dpr;
+  const ctx=canvas.getContext('2d'); ctx.scale(dpr,dpr);
+
+  const PAD={top:16,right:16,bottom:28,left:36};
+  const plotW=W-PAD.left-PAD.right, plotH=H-PAD.top-PAD.bottom;
+
+  // データ準備
+  const datasets=results.map((res,i)=>({gold:res.goldAvg, inc:res.inAvg, out:res.outAvg, color:colors[i]}));
+
+  // Y軸レンジ
+  let yMin=0, yMax=5;
+  datasets.forEach(d=>{d.gold.forEach(v=>{yMax=Math.max(yMax,v);});d.inc.forEach(v=>{yMax=Math.max(yMax,v);});});
+  yMax=Math.ceil(yMax/5)*5+2;
+
+  function toX(t){return PAD.left+t/(TURNS-1)*plotW;}
+  function toY(v){return PAD.top+plotH-(v-yMin)/(yMax-yMin)*plotH;}
+
+  // グリッド
+  ctx.strokeStyle='rgba(42,48,72,0.8)'; ctx.lineWidth=1;
+  const steps=5;
+  for(let i=0;i<=steps;i++){
+    const v=yMin+(yMax-yMin)*i/steps;
+    const y=toY(v);
+    ctx.beginPath(); ctx.moveTo(PAD.left,y); ctx.lineTo(W-PAD.right,y); ctx.stroke();
+    ctx.fillStyle='#5a5040'; ctx.font=`${9*dpr/dpr}px Cinzel`;
+    ctx.fillText(v.toFixed(0),PAD.left-4,y+3); // 数値は左に
+  }
+
+  // X軸ラベル（5T区切り）
+  ctx.fillStyle='#5a5040'; ctx.textAlign='center'; ctx.font='9px Cinzel';
+  [1,5,10,15,20,25].forEach(t=>{
+    const x=toX(t-1);
+    ctx.fillText('T'+t,x,H-PAD.bottom+12);
+  });
+
+  // 収入・支出ライン（最初のデータセットのみ単独モードで表示）
+  if(results.length===1){
+    const d=datasets[0];
+    // 収入
+    ctx.strokeStyle='rgba(122,188,80,0.6)'; ctx.lineWidth=1.5; ctx.setLineDash([3,3]);
+    ctx.beginPath(); d.inc.forEach((v,t)=>{t===0?ctx.moveTo(toX(t),toY(v)):ctx.lineTo(toX(t),toY(v));});
+    ctx.stroke();
+    // 支出
+    ctx.strokeStyle='rgba(224,80,80,0.6)'; ctx.lineWidth=1.5;
+    ctx.beginPath(); d.out.forEach((v,t)=>{t===0?ctx.moveTo(toX(t),toY(v)):ctx.lineTo(toX(t),toY(v));});
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // 所持金ライン
+  datasets.forEach(d=>{
+    ctx.strokeStyle=d.color; ctx.lineWidth=2.5; ctx.setLineDash([]);
+    ctx.beginPath();
+    // 初期金を0ターン目として描画
+    const pts=[initGold,...d.gold];
+    pts.forEach((v,i)=>{
+      const x=PAD.left+(i===0?0:(i-1)/(TURNS-1)*plotW);
+      i===0?ctx.moveTo(x,toY(v)):ctx.lineTo(x,toY(v));
+    });
+    ctx.stroke();
+    // ドット
+    pts.forEach((v,i)=>{
+      if(i%5===0){const x=PAD.left+(i===0?0:(i-1)/(TURNS-1)*plotW);ctx.beginPath();ctx.arc(x,toY(v),3,0,Math.PI*2);ctx.fillStyle=d.color;ctx.fill();}
+    });
+  });
+
+  // 0ライン強調
+  const y0=toY(0);
+  if(y0>=PAD.top&&y0<=H-PAD.bottom){
+    ctx.strokeStyle='rgba(201,168,76,0.3)'; ctx.lineWidth=1; ctx.setLineDash([2,2]);
+    ctx.beginPath(); ctx.moveTo(PAD.left,y0); ctx.lineTo(W-PAD.right,y0); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+// --- ユニットテーブル ---
+function mkSingleTable(role,res,isOpt){const el=document.createElement('div');el.className='panel ai';el.innerHTML='<div class="ptitle">📋 ユニット別 平均雇用数</div>'+makeTableHTML(role,res,isOpt);return el;}
+function mkCmpTables(role,rand,opt){
+  const el=document.createElement('div');el.className='cmp2';
+  [['ランダム選択',rand,'ch-rand',false],['最適選択',opt,'ch-opt',true]].forEach(([label,res,cls,isOpt])=>{
+    const col=document.createElement('div');
+    col.innerHTML=`<div class="col-head ${cls}">${label}</div>`;
+    const p=document.createElement('div');p.className='panel';p.style.cssText='border-radius:0 0 8px 8px;border-top:none;';
+    p.innerHTML=makeTableHTML(role,res,isOpt);col.appendChild(p);el.appendChild(col);
+  });
+  return el;
+}
+function makeTableHTML(role,res,isOpt){
+  const maxR=Math.max(...REGULAR_UNITS.map(u=>res.regAvg[u]),0.001);
+  const maxM=Math.max(...MERC_UNITS.map(u=>res.mercAvg[u]),0.001);
+  const targets=role?role.targetUnits:[];
+  const rRows=REGULAR_UNITS.map(u=>{
+    const v=res.regAvg[u],pct=(v/maxR*100).toFixed(0),isT=targets.includes(u);
+    return `<tr class="${isT?'trow':''}"><td class="uname">${u}${isT?'<span style="color:var(--gold);font-size:8px;margin-left:2px">★</span>':''}</td><td>正規兵</td>
+      <td class="bcell"><span class="cbadge cr">${fmt(v,2)}</span><div class="bwrap"><div class="bfill br" style="width:${pct}%"></div></div></td></tr>`;
+  }).join('');
+  const mRows=MERC_UNITS.map(u=>{
+    const v=res.mercAvg[u],pct=(v/maxM*100).toFixed(0);
+    return `<tr><td>${u}</td><td>傭兵C</td><td class="bcell"><span class="cbadge cm">${fmt(v,2)}</span><div class="bwrap"><div class="bfill bm" style="width:${pct}%"></div></div></td></tr>`;
+  }).join('');
+  return `<table class="utable"><thead><tr><th>ユニット</th><th>種別</th><th>平均雇用数</th></tr></thead>
+    <tbody>${rRows}<tr><td colspan="3" style="padding:2px;background:var(--bg-mid)"></td></tr>${mRows}</tbody></table>
+    <div class="pfootnote">★＝目標役のターゲット。雇用コスト不足でスキップされた場合は計上されません。</div>`;
+}
+
+// --- ターン別雇用グラフ（棒グラフ） ---
+function mkSingleBarChart(res){const el=document.createElement('div');el.className='chart-container ai';el.innerHTML='<div class="chart-heading" style="margin-bottom:10px">📊 ターン別 平均雇用回数</div>'+makeBarHTML(res);return el;}
+function mkCmpBarCharts(rand,opt){
+  const el=document.createElement('div');el.className='cmp2';
+  [['ランダム選択',rand,'ch-rand'],['最適選択',opt,'ch-opt']].forEach(([label,res,cls])=>{
+    const col=document.createElement('div');col.innerHTML=`<div class="col-head ${cls}">${label}</div>`;
+    const p=document.createElement('div');p.className='chart-container';p.style.cssText='border-radius:0 0 8px 8px;border-top:none;';
+    p.innerHTML=makeBarHTML(res);col.appendChild(p);el.appendChild(col);
+  });
+  return el;
+}
+function makeBarHTML(res){
+  const G=5,groups=[];
+  for(let i=0;i<TURNS;i+=G){
+    const r=res.trRegAvg.slice(i,i+G).reduce((s,v)=>s+v,0);
+    const m=res.trMercAvg.slice(i,i+G).reduce((s,v)=>s+v,0);
+    groups.push({label:`T${i+1}-${Math.min(i+G,TURNS)}`,r,m});
+  }
+  const mx=Math.max(...groups.map(g=>g.r+g.m),0.01);
+  const bars=groups.map(g=>{
+    const rH=Math.round(g.r/mx*70),mH=Math.round(g.m/mx*70);
+    return `<div class="cbgroup"><div class="cb cb-r" style="height:${rH}px"></div><div class="cb cb-m" style="height:${mH}px"></div></div>`;
+  }).join('');
+  const lbls=groups.map(g=>`<div class="clbl">${g.label}</div>`).join('');
+  return `<div style="display:flex;align-items:flex-end;gap:2px;height:75px;padding:0 4px;">${bars}</div>
+    <div style="display:flex;gap:2px;padding:0 4px;margin-top:3px;">${lbls}</div>
+    <div class="legend" style="margin-top:6px;">
+      <div class="li"><div class="ld" style="background:var(--crimson-light)"></div>正規兵系</div>
+      <div class="li"><div class="ld" style="background:var(--accent-a)"></div>傭兵</div>
+    </div>`;
+}
+
+// --- 個別プレイ ---
+function mkSingleIndividual(res,isOpt,role){const el=document.createElement('div');el.className='panel ai';el.innerHTML='<div class="ptitle">🎲 個別プレイ結果</div>'+makeIndHTML(res,role);return el;}
+function mkCmpIndividual(rand,opt,role){
+  const el=document.createElement('div');el.className='cmp2';
+  [['ランダム選択',rand,'ch-rand'],['最適選択',opt,'ch-opt']].forEach(([label,res,cls])=>{
+    const col=document.createElement('div');col.innerHTML=`<div class="col-head ${cls}">${label}</div>`;
+    const p=document.createElement('div');p.className='panel';p.style.cssText='border-radius:0 0 8px 8px;border-top:none;';
+    p.innerHTML=makeIndHTML(res,role);col.appendChild(p);el.appendChild(col);
+  });
+  return el;
+}
+function makeIndHTML(res,role){
+  const chipCls={regular:'ch-r',merc:'ch-m',massHire:'ch-mass',emergHire:'ch-emerg'};
+  const chipSfx={regular:'',merc:'(傭)',massHire:'[大量]',emergHire:'[緊急]'};
+  const rows=res.allTrials.map((t,i)=>{
+    const chips=t.hired.map(h=>`<span class="uchip ${h.isTarget?'ch-target':chipCls[h.source]||'ch-r'}">${h.unit}${chipSfx[h.source]||''}</span>`).join('');
+    // 所持金表示（最終ターン）
+    const finalG=t.goldByTurn[t.goldByTurn.length-1];
+    return `<div class="prow"><span class="pnum">Play ${i+1}</span><div class="punits">${chips||'<span style="color:var(--text-dim);font-size:10px">雇用なし</span>'}</div><span class="ptotal">計${t.hired.length}体 💰${finalG.toFixed(0)}</span></div>`;
+  }).join('');
+  return `${rows}<div class="pfootnote"><span style="color:var(--gold)">金色＝目標役ユニット</span>　<span style="color:#e07060">赤＝正規兵</span>　<span style="color:#7ab8e8">青＝傭兵</span>　<span style="color:#ff9070">橙＝大量徴兵</span>　<span style="color:#70d890">緑＝緊急徴兵</span>　💰＝T25末所持金</div>`;
+}
+
+// ==============================
+// 起動
+// ==============================
+init();
+</script>
+</body>
+</html>

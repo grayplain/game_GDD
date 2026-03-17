@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>戦略マップ プロトタイプ</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
+
+  :root {
+    --bg-deep: #0a0d12;
+    --bg-panel: #161c28;
+    --gold: #c9a84c;
+    --gold-dim: #7a6030;
+    --red-light: #e74c3c;
+    --blue: #2e6da4;
+    --blue-light: #4a9fd4;
+    --text-main: #d4c4a0;
+    --text-dim: #6a7a90;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg-deep);
+    color: var(--text-main);
+    font-family: 'Crimson Text', serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.6;
+  }
+
+  header {
+    width: 100%;
+    text-align: center;
+    padding: 24px 20px 12px;
+    position: relative;
+    z-index: 1;
+    border-bottom: 1px solid var(--gold-dim);
+  }
+
+  header h1 {
+    font-family: 'Cinzel', serif;
+    font-size: 1.6rem;
+    font-weight: 900;
+    color: var(--gold);
+    letter-spacing: 0.15em;
+    text-shadow: 0 0 20px rgba(201,168,76,0.4);
+  }
+
+  header p {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    margin-top: 4px;
+    letter-spacing: 0.05em;
+  }
+
+  .main-layout {
+    display: flex;
+    gap: 24px;
+    padding: 28px 20px;
+    width: 100%;
+    max-width: 920px;
+    align-items: flex-start;
+    position: relative;
+    z-index: 1;
+  }
+
+  .map-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+  }
+
+  #hexCanvas {
+    display: block;
+    filter: drop-shadow(0 0 24px rgba(201,168,76,0.08));
+  }
+
+  .side-panel {
+    width: 230px;
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+  }
+
+  .panel-box {
+    background: var(--bg-panel);
+    border: 1px solid var(--gold-dim);
+    border-radius: 6px;
+    padding: 12px 14px;
+    position: relative;
+  }
+
+  .panel-box::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+    border-radius: 6px 6px 0 0;
+  }
+
+  .panel-label {
+    font-family: 'Cinzel', serif;
+    font-size: 0.62rem;
+    letter-spacing: 0.18em;
+    color: var(--gold-dim);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .turn-badge {
+    font-family: 'Cinzel', serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    text-align: center;
+    padding: 5px 0 3px;
+  }
+  .turn-badge.player { color: var(--blue-light); }
+  .turn-badge.cpu    { color: var(--red-light); }
+
+  .turn-number {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    text-align: center;
+    margin-top: 3px;
+  }
+
+  /* Unit rows */
+  .unit-status-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 7px;
+    border-radius: 4px;
+    margin-bottom: 4px;
+    border: 1px solid transparent;
+    transition: all 0.18s;
+    font-size: 0.8rem;
+  }
+  .unit-status-row.selectable {
+    cursor: pointer;
+    border-color: rgba(74,159,212,0.2);
+  }
+  .unit-status-row.selectable:hover {
+    background: rgba(74,159,212,0.09);
+    border-color: rgba(74,159,212,0.5);
+  }
+  .unit-status-row.active-unit {
+    background: rgba(201,168,76,0.12);
+    border-color: var(--gold);
+  }
+  .unit-status-row.moved { opacity: 0.42; }
+
+  .unit-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .unit-dot.p { background: #4a9fd4; box-shadow: 0 0 5px #4a9fd4; }
+  .unit-dot.c { background: #e74c3c; box-shadow: 0 0 5px #e74c3c; }
+  .unit-name  { flex: 1; color: var(--text-main); }
+  .unit-hex   { color: var(--text-dim); font-size: 0.73rem; }
+  .unit-moved-badge {
+    font-size: 0.62rem;
+    background: rgba(100,120,80,0.35);
+    color: #8aaa70;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: 'Cinzel', serif;
+  }
+
+  /* Log */
+  .log-area {
+    min-height: 100px;
+    max-height: 140px;
+    overflow-y: auto;
+    font-size: 0.79rem;
+    line-height: 1.65;
+    color: var(--text-dim);
+  }
+  .log-area::-webkit-scrollbar { width: 4px; }
+  .log-area::-webkit-scrollbar-thumb { background: var(--gold-dim); border-radius: 2px; }
+  .log-entry { margin-bottom: 1px; }
+  .log-entry.player-log { color: var(--blue-light); }
+  .log-entry.cpu-log    { color: #e08070; }
+  .log-entry.system-log { color: var(--gold); }
+
+  /* Legend */
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.79rem;
+    margin-bottom: 5px;
+    color: var(--text-dim);
+  }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  /* Instruction */
+  .instruction {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    text-align: center;
+    font-style: italic;
+    line-height: 1.5;
+    padding: 1px 0;
+    min-height: 2.4em;
+  }
+
+  /* Turn end button */
+  .btn-turn-end {
+    width: 100%;
+    padding: 11px;
+    background: linear-gradient(135deg, #1a3050, #0e1e35);
+    border: 1px solid var(--blue);
+    border-radius: 6px;
+    color: var(--blue-light);
+    font-family: 'Cinzel', serif;
+    font-size: 0.88rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-shadow: 0 0 10px rgba(74,159,212,0.4);
+    position: relative;
+    overflow: hidden;
+  }
+  .btn-turn-end::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(74,159,212,0.15), transparent);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .btn-turn-end:hover:not(:disabled)::after { opacity: 1; }
+  .btn-turn-end:hover:not(:disabled) {
+    border-color: var(--blue-light);
+    box-shadow: 0 0 16px rgba(74,159,212,0.3);
+    transform: translateY(-1px);
+  }
+  .btn-turn-end:disabled {
+    opacity: 0.35; cursor: not-allowed;
+    border-color: var(--text-dim); color: var(--text-dim); text-shadow: none;
+  }
+
+  @keyframes pulse { 0%,100%{opacity:0.4}50%{opacity:1} }
+  .thinking { animation: pulse 1s infinite; color: var(--red-light); font-style:italic; font-size:0.8rem; text-align:center; display:block; }
+
+  /* Battle button */
+  @keyframes battlePulse {
+    0%  { box-shadow: 0 0 10px rgba(200,50,50,0.5), 0 0 0 0 rgba(200,50,50,0.4); }
+    50% { box-shadow: 0 0 22px rgba(200,50,50,0.9), 0 0 0 8px rgba(200,50,50,0); }
+    100%{ box-shadow: 0 0 10px rgba(200,50,50,0.5), 0 0 0 0 rgba(200,50,50,0); }
+  }
+  @keyframes battleAppear {
+    from { opacity:0; transform:translateY(10px) scale(0.9); }
+    to   { opacity:1; transform:translateY(0) scale(1); }
+  }
+  .btn-battle {
+    position: absolute;
+    bottom: 12px; left: 12px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 11px 20px;
+    background: linear-gradient(135deg, #3a0a0a, #1e0505);
+    border: 1.5px solid #c0392b;
+    border-radius: 6px;
+    color: #ff7a6a;
+    font-family: 'Cinzel', serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    cursor: pointer;
+    animation: battleAppear 0.3s ease forwards, battlePulse 1.6s ease-in-out 0.3s infinite;
+    z-index: 10;
+  }
+  .btn-battle:hover { background: linear-gradient(135deg, #5a1010, #300808); border-color: #e74c3c; color: #ffaa99; }
+  .battle-icon { font-size: 1.2rem; }
+  .battle-text { text-shadow: 0 0 10px rgba(231,76,60,0.6); }
+
+  .hex-tooltip {
+    position: fixed;
+    background: var(--bg-panel);
+    border: 1px solid var(--gold-dim);
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 0.78rem;
+    color: var(--gold);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 100;
+    font-family: 'Cinzel', serif;
+  }
+  .hex-tooltip.visible { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⚔ 戦略マップ プロトタイプ</h1>
+  <p>HEXグリッド移動システム — 検討用</p>
+</header>
+
+<div class="main-layout">
+  <div class="map-container">
+    <canvas id="hexCanvas" width="480" height="340"></canvas>
+    <button class="btn-battle" id="btnBattle" onclick="startBattle()" style="display:none;">
+      <span class="battle-icon">⚔</span>
+      <span class="battle-text">交戦する</span>
+    </button>
+  </div>
+
+  <div class="side-panel">
+    <div class="panel-box">
+      <div class="panel-label">現在のターン</div>
+      <div id="turnBadge" class="turn-badge player">プレイヤー</div>
+      <div id="turnNumber" class="turn-number">ターン 1</div>
+    </div>
+
+    <div class="panel-box">
+      <div class="panel-label">自軍ユニット</div>
+      <div id="playerUnitList"></div>
+    </div>
+
+    <div class="panel-box">
+      <div class="panel-label">敵軍ユニット</div>
+      <div id="cpuUnitList"></div>
+    </div>
+
+    <div class="panel-box">
+      <div class="panel-label">凡例</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#4a9fd4;box-shadow:0 0 5px #4a9fd4;"></div> 自軍ユニット（クリックで選択）</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#e74c3c;box-shadow:0 0 5px #e74c3c;"></div> 敵軍ユニット</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#2a5a35;border:1px solid #4a9a55;"></div> 移動可能マス</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#3a3010;border:1px solid #c9a84c;"></div> 選択中ユニット</div>
+    </div>
+
+    <div class="panel-box">
+      <div class="panel-label">操作ログ</div>
+      <div class="log-area" id="logArea"></div>
+    </div>
+
+    <div class="instruction" id="instruction">ユニットをクリックして選択</div>
+
+    <button class="btn-turn-end" id="btnTurnEnd" onclick="endTurn()">ターンエンド</button>
+  </div>
+</div>
+
+<div class="hex-tooltip" id="hexTooltip"></div>
+
+<script>
+// ===== HEX GRID =====
+const HEX_SIZE = 50;
+const CANVAS_W = 480;
+const CANVAS_H = 340;
+const HR   = Math.sqrt(3) * HEX_SIZE;
+const VR   = 1.5 * HEX_SIZE;
+const HALF = HR / 2;
+const ROW1_X = (CANVAS_W - 3 * HR) / 2;
+const ROW_Y  = [80, 80 + VR, 80 + 2 * VR];
+
+const hexDefs = [
+  { id:1,  cx: ROW1_X + HALF + 0*HR, cy: ROW_Y[0] },
+  { id:2,  cx: ROW1_X + HALF + 1*HR, cy: ROW_Y[0] },
+  { id:3,  cx: ROW1_X + HALF + 2*HR, cy: ROW_Y[0] },
+  { id:4,  cx: ROW1_X + 0*HR,        cy: ROW_Y[1] },
+  { id:5,  cx: ROW1_X + 1*HR,        cy: ROW_Y[1] },
+  { id:6,  cx: ROW1_X + 2*HR,        cy: ROW_Y[1] },
+  { id:7,  cx: ROW1_X + 3*HR,        cy: ROW_Y[1] },
+  { id:8,  cx: ROW1_X + HALF + 0*HR, cy: ROW_Y[2] },
+  { id:9,  cx: ROW1_X + HALF + 1*HR, cy: ROW_Y[2] },
+  { id:10, cx: ROW1_X + HALF + 2*HR, cy: ROW_Y[2] },
+];
+
+const ADJACENCY = {
+  1:[2,4,5], 2:[1,3,5,6], 3:[2,6,7],
+  4:[1,5,8], 5:[1,2,4,6,8,9], 6:[2,3,5,7,9,10],
+  7:[3,6,10], 8:[4,5,9], 9:[5,6,8,10], 10:[6,7,9],
+};
+
+// ===== GAME STATE =====
+let playerUnits = [
+  { id:'P1', label:'自軍 A', hex:4, moved:false },
+  { id:'P2', label:'自軍 B', hex:8, moved:false },
+];
+let cpuUnits = [
+  { id:'C1', label:'敵軍 α', hex:3, moved:false },
+  { id:'C2', label:'敵軍 β', hex:7, moved:false },
+];
+
+let currentTurn  = 'player';
+let turnCount    = 1;
+let selectedUnit = null;
+let reachable    = [];
+
+// ===== CANVAS =====
+const canvas  = document.getElementById('hexCanvas');
+const ctx     = canvas.getContext('2d');
+const tooltip = document.getElementById('hexTooltip');
+
+// ===== HELPERS =====
+function hexById(id) { return hexDefs.find(h => h.id === id); }
+function allUnits()  { return [...playerUnits, ...cpuUnits]; }
+
+function getReachable(hexId) { return ADJACENCY[hexId]; }
+
+function checkContact(movedUnit) {
+  const enemies = movedUnit.id.startsWith('P')
+    ? cpuUnits.filter(c => c.hex === movedUnit.hex)
+    : playerUnits.filter(p => p.hex === movedUnit.hex);
+  return enemies.length > 0;
+}
+
+function showBattleBtn(visible) {
+  document.getElementById('btnBattle').style.display = visible ? 'flex' : 'none';
+}
+
+// ===== DRAW =====
+function drawHex(cx, cy, size, fill, stroke, sw) {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = Math.PI / 180 * (60 * i - 30);
+    i === 0
+      ? ctx.moveTo(cx + size * Math.cos(a), cy + size * Math.sin(a))
+      : ctx.lineTo(cx + size * Math.cos(a), cy + size * Math.sin(a));
+  }
+  ctx.closePath();
+  ctx.fillStyle = fill;   ctx.fill();
+  ctx.strokeStyle = stroke; ctx.lineWidth = sw || 1.5; ctx.stroke();
+}
+
+function drawUnitsOnHex(hDef, units) {
+  const n = units.length;
+  units.forEach((u, idx) => {
+    const isPlayer   = u.id.startsWith('P');
+    const isSelected = selectedUnit && selectedUnit.id === u.id;
+    const isMoved    = u.moved;
+
+    const color = isPlayer ? '#4a9fd4' : '#e74c3c';
+    const glow  = isPlayer ? 'rgba(74,159,212,0.7)' : 'rgba(231,76,60,0.7)';
+    const icon  = isPlayer ? '⚔' : '☠';
+    const sublabel = (u.id === 'P1' || u.id === 'C1') ? 'A' : 'B';
+
+    // 2体いる場合は左右にオフセット
+    const ox = n > 1 ? (idx === 0 ? -13 : 13) : 0;
+    const cx = hDef.cx + ox;
+    const cy = hDef.cy;
+
+    ctx.globalAlpha = isMoved ? 0.35 : 1.0;
+
+    // 選択中ゴールドリング
+    if (isSelected) {
+      ctx.shadowColor = '#e8c96a'; ctx.shadowBlur = 24;
+      ctx.beginPath(); ctx.arc(cx, cy, 22, 0, Math.PI*2);
+      ctx.strokeStyle = '#e8c96a'; ctx.lineWidth = 2.5; ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    // 本体
+    ctx.shadowColor = glow; ctx.shadowBlur = isSelected ? 24 : 14;
+    ctx.beginPath(); ctx.arc(cx, cy, 17, 0, Math.PI*2);
+    ctx.fillStyle = isPlayer ? 'rgba(14,38,65,0.96)' : 'rgba(60,14,14,0.96)';
+    ctx.fill();
+    ctx.strokeStyle = isSelected ? '#e8c96a' : color;
+    ctx.lineWidth   = isSelected ? 2.5 : 2;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // アイコン
+    ctx.fillStyle = isSelected ? '#e8c96a' : color;
+    ctx.font = 'bold 13px serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(icon, cx, cy - 1);
+
+    // A/B ラベル（右下）
+    ctx.font = 'bold 8px Cinzel, serif';
+    ctx.fillStyle = isSelected ? '#e8d080'
+      : (isPlayer ? 'rgba(160,210,244,0.9)' : 'rgba(240,160,144,0.9)');
+    ctx.fillText(sublabel, cx + 10, cy + 10);
+
+    ctx.globalAlpha = 1.0;
+  });
+}
+
+function render() {
+  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+  const bg = ctx.createRadialGradient(CANVAS_W/2, CANVAS_H/2, 50, CANVAS_W/2, CANVAS_H/2, 280);
+  bg.addColorStop(0, '#131926'); bg.addColorStop(1, '#0a0d12');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+  hexDefs.forEach(h => {
+    const isReachable   = reachable.includes(h.id);
+    const isSelectedHex = selectedUnit && selectedUnit.hex === h.id;
+
+    let fill = '#1a2235', stroke = '#2a3a55', sw = 1.5;
+    if (isReachable)   { fill = '#1a3020'; stroke = '#4a9a55'; sw = 2; }
+    if (isSelectedHex) { fill = '#3a3010'; stroke = '#c9a84c'; sw = 2.5; }
+
+    drawHex(h.cx, h.cy, HEX_SIZE - 3, fill, stroke, sw);
+    drawHex(h.cx, h.cy, HEX_SIZE - 8, 'transparent', 'rgba(255,255,255,0.03)', 1);
+
+    // HEX番号
+    ctx.fillStyle = '#3a4a65'; ctx.font = '500 11px Cinzel, serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText(h.id, h.cx, h.cy - HEX_SIZE + 8);
+
+    // 移動候補リング
+    if (isReachable) {
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = Math.PI / 180 * (60 * i - 30);
+        const px = h.cx + (HEX_SIZE - 4) * Math.cos(a);
+        const py = h.cy + (HEX_SIZE - 4) * Math.sin(a);
+        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.strokeStyle = 'rgba(74,200,100,0.35)'; ctx.lineWidth = 3; ctx.stroke();
+    }
+  });
+
+  // ユニット描画（HEXごとにまとめる）
+  hexDefs.forEach(h => {
+    const units = allUnits().filter(u => u.hex === h.id);
+    if (units.length > 0) drawUnitsOnHex(h, units);
+  });
+}
+
+// ===== INTERACTION =====
+function getHexAt(mx, my) {
+  for (const h of hexDefs) {
+    const dx = mx - h.cx, dy = my - h.cy;
+    if (Math.sqrt(dx*dx + dy*dy) < HEX_SIZE - 4) return h.id;
+  }
+  return null;
+}
+
+// 指定HEXにいる未移動プレイヤーユニット
+function getMovablePlayerUnitAt(hexId) {
+  return playerUnits.find(u => u.hex === hexId && !u.moved);
+}
+
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const hid = getHexAt(mx, my);
+
+  if (hid !== null) {
+    const occ = allUnits().filter(u => u.hex === hid).map(u => u.label).join(', ');
+    tooltip.textContent = `HEX ${hid}${occ ? '  ' + occ : ''}`;
+    tooltip.style.left = (e.clientX + 14) + 'px';
+    tooltip.style.top  = (e.clientY - 28) + 'px';
+    tooltip.classList.add('visible');
+
+    if (currentTurn === 'player') {
+      const hasMovable = !!getMovablePlayerUnitAt(hid);
+      const canMove    = selectedUnit && reachable.includes(hid);
+      canvas.style.cursor = (hasMovable || canMove) ? 'pointer' : 'default';
+    } else {
+      canvas.style.cursor = 'default';
+    }
+  } else {
+    tooltip.classList.remove('visible');
+    canvas.style.cursor = 'default';
+  }
+});
+
+canvas.addEventListener('mouseleave', () => tooltip.classList.remove('visible'));
+
+canvas.addEventListener('click', e => {
+  if (currentTurn !== 'player') return;
+
+  const rect = canvas.getBoundingClientRect();
+  const hid = getHexAt(e.clientX - rect.left, e.clientY - rect.top);
+  if (hid === null) return;
+
+  // 【1】自軍ユニット選択
+  const unitOnHex = getMovablePlayerUnitAt(hid);
+  if (unitOnHex) {
+    if (selectedUnit && selectedUnit.id === unitOnHex.id) {
+      // 同じユニットをクリック → 選択解除
+      selectedUnit = null; reachable = [];
+    } else {
+      selectedUnit = unitOnHex;
+      reachable    = getReachable(hid);
+      addLog(`${unitOnHex.label} を選択 (HEX ${hid})`, 'player-log');
+    }
+    updateUI(); render();
+    return;
+  }
+
+  // 【2】移動先選択
+  if (selectedUnit && reachable.includes(hid)) {
+    const from = selectedUnit.hex;
+    selectedUnit.hex   = hid;
+    selectedUnit.moved = true;
+    reachable = [];
+
+    const contact = checkContact(selectedUnit);
+    addLog(
+      `${selectedUnit.label}  HEX ${from} → HEX ${hid}` + (contact ? '  ⚔ 敵軍と接触！' : ''),
+      'player-log'
+    );
+    if (contact) showBattleBtn(true);
+
+    selectedUnit = null;
+
+    // 全ユニット移動済み → 自動終了
+    if (playerUnits.every(u => u.moved)) {
+      addLog('自軍 全ユニット移動完了', 'system-log');
+      updateUI(); render();
+      setTimeout(() => endTurn(true), 500);
+    } else {
+      updateUI(); render();
+    }
+    return;
+  }
+
+  // 選択中に無効なHEXをクリック → 選択解除
+  if (selectedUnit) {
+    selectedUnit = null; reachable = [];
+    updateUI(); render();
+  }
+});
+
+// ===== GAME LOGIC =====
+function endTurn(auto = false) {
+  if (currentTurn !== 'player') return;
+  if (!auto) {
+    const unmoved = playerUnits.filter(u => !u.moved);
+    if (unmoved.length > 0)
+      addLog(`（${unmoved.map(u => u.label).join('・')} 未移動のままターン終了）`, 'system-log');
+  }
+  selectedUnit = null; reachable = [];
+  showBattleBtn(false);
+  currentTurn = 'cpu';
+  updateUI(); render();
+  setTimeout(cpuTurn, 700);
+}
+
+function cpuTurn() {
+  let delay = 0;
+  cpuUnits.forEach((unit, idx) => {
+    setTimeout(() => {
+      // 最も近いプレイヤーユニットに向かう
+      let bestHex = null, bestDist = Infinity;
+      getReachable(unit.hex).forEach(nid => {
+        const nh = hexById(nid);
+        playerUnits.forEach(pu => {
+          const ph = hexById(pu.hex);
+          const d  = Math.hypot(nh.cx - ph.cx, nh.cy - ph.cy);
+          if (d < bestDist) { bestDist = d; bestHex = nid; }
+        });
+      });
+
+      if (bestHex !== null) {
+        const from  = unit.hex;
+        unit.hex    = bestHex;
+        unit.moved  = true;
+        const contact = checkContact(unit);
+        addLog(
+          `${unit.label}  HEX ${from} → HEX ${bestHex}` + (contact ? '  ⚔ 自軍と接触！' : ''),
+          'cpu-log'
+        );
+        if (contact) showBattleBtn(true);
+      } else {
+        addLog(`${unit.label} 移動不可（待機）`, 'cpu-log');
+      }
+      render();
+      updateUnitListOnly();
+
+      if (idx === cpuUnits.length - 1) {
+        setTimeout(() => {
+          turnCount++;
+          startPlayerTurn();
+          addLog(`── ターン ${turnCount} 開始 ──`, 'system-log');
+        }, 400);
+      }
+    }, idx * 650);
+  });
+}
+
+function startPlayerTurn() {
+  currentTurn = 'player';
+  selectedUnit = null; reachable = [];
+  playerUnits.forEach(u => u.moved = false);
+  cpuUnits.forEach(u => u.moved = false);
+  updateUI(); render();
+}
+
+// ===== UI =====
+function updateUI() {
+  const badge = document.getElementById('turnBadge');
+  const instr = document.getElementById('instruction');
+  const btn   = document.getElementById('btnTurnEnd');
+  document.getElementById('turnNumber').textContent = `ターン ${turnCount}`;
+
+  if (currentTurn === 'player') {
+    badge.textContent = 'プレイヤー';
+    badge.className   = 'turn-badge player';
+    btn.disabled      = false;
+
+    if (selectedUnit) {
+      instr.textContent = `${selectedUnit.label} — 移動先HEXをクリック`;
+    } else {
+      const rem = playerUnits.filter(u => !u.moved).length;
+      instr.textContent = rem > 0
+        ? `未移動 ${rem} 体 — ユニットをクリックして選択`
+        : 'ターンエンドを押してください';
+    }
+  } else {
+    badge.textContent = '敵軍 思考中…';
+    badge.className   = 'turn-badge cpu';
+    btn.disabled      = true;
+    instr.innerHTML   = '<span class="thinking">敵軍が思考中です…</span>';
+  }
+  renderUnitList();
+}
+
+function updateUnitListOnly() { renderUnitList(); }
+
+function renderUnitList() {
+  // 自軍
+  const pl = document.getElementById('playerUnitList');
+  pl.innerHTML = '';
+  playerUnits.forEach(u => {
+    const isActive = selectedUnit && selectedUnit.id === u.id;
+    const row = document.createElement('div');
+    row.className = 'unit-status-row'
+      + (u.moved ? ' moved' : (currentTurn === 'player' ? ' selectable' : ''))
+      + (isActive ? ' active-unit' : '');
+    row.innerHTML = `
+      <div class="unit-dot p"></div>
+      <span class="unit-name">${u.label}</span>
+      <span class="unit-hex">HEX&nbsp;${u.hex}</span>
+      ${u.moved ? '<span class="unit-moved-badge">移動済</span>' : ''}
+    `;
+    if (!u.moved && currentTurn === 'player') {
+      row.addEventListener('click', () => {
+        if (selectedUnit && selectedUnit.id === u.id) {
+          selectedUnit = null; reachable = [];
+        } else {
+          selectedUnit = u;
+          reachable    = getReachable(u.hex);
+          addLog(`${u.label} を選択 (HEX ${u.hex})`, 'player-log');
+        }
+        updateUI(); render();
+      });
+    }
+    pl.appendChild(row);
+  });
+
+  // 敵軍
+  const cl = document.getElementById('cpuUnitList');
+  cl.innerHTML = '';
+  cpuUnits.forEach(u => {
+    const row = document.createElement('div');
+    row.className = 'unit-status-row' + (u.moved ? ' moved' : '');
+    row.innerHTML = `
+      <div class="unit-dot c"></div>
+      <span class="unit-name">${u.label}</span>
+      <span class="unit-hex">HEX&nbsp;${u.hex}</span>
+      ${u.moved ? '<span class="unit-moved-badge">移動済</span>' : ''}
+    `;
+    cl.appendChild(row);
+  });
+}
+
+function addLog(text, cls) {
+  const area = document.getElementById('logArea');
+  const el   = document.createElement('div');
+  el.className  = 'log-entry ' + (cls || '');
+  el.textContent = text;
+  area.appendChild(el);
+  area.scrollTop = area.scrollHeight;
+}
+
+function startBattle() {
+  addLog('⚔ 交戦！（未実装 — 今後の検討項目）', 'system-log');
+  showBattleBtn(false);
+}
+
+// ===== INIT =====
+addLog('── ターン 1 開始 ──', 'system-log');
+addLog('自軍 A: HEX 4 ／ 自軍 B: HEX 8', 'player-log');
+addLog('敵軍 α: HEX 3 ／ 敵軍 β: HEX 7', 'cpu-log');
+startPlayerTurn();
+</script>
+</body>
+</html>
